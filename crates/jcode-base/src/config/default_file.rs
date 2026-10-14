@@ -610,8 +610,10 @@ swarm_stall_after_secs = 600
 # preferred = "ghostty"
 
 [notifications]
-# Desktop notifications for interactive sessions (macOS Notification Center /
-# Linux notify-send). Separate from [safety], which covers ambient-mode
+# Desktop notifications for interactive sessions. Kitty, Ghostty, WezTerm,
+# foot and iTerm2 post them natively (also over SSH and in tmux with
+# allow-passthrough on); otherwise macOS Notification Center or Linux
+# notify-send. Separate from [safety], which covers ambient-mode
 # ntfy/email/channel notifications.
 #
 # Notify when an agent turn finishes. Fires only for long turns and, by

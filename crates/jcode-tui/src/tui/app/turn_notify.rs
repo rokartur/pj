@@ -8,9 +8,7 @@
 
 use super::App;
 use crate::todo::TodoItem;
-#[cfg(any(target_os = "macos", test))]
 use base64::Engine as _;
-#[cfg(target_os = "macos")]
 use std::io::Write;
 
 /// Maximum characters of assistant text shown in the notification body.
@@ -117,28 +115,66 @@ impl App {
     }
 }
 
+/// Notification protocol of the terminal that hosts this client. Detected
+/// from env vars that survive SSH (`TERM`, `LC_TERMINAL`) and tmux (vars
+/// inherited from the terminal that started the tmux server).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TerminalProtocol {
+    /// OSC 99
+    Kitty,
+    /// OSC 777;notify: Ghostty, WezTerm, foot
+    Osc777,
+    /// OSC 9
+    Iterm,
+}
+
+fn detect_terminal_protocol(env: impl Fn(&str) -> Option<String>) -> Option<TerminalProtocol> {
+    let term_program = env("TERM_PROGRAM").unwrap_or_default().to_ascii_lowercase();
+    let term = env("TERM").unwrap_or_default().to_ascii_lowercase();
+    if env("KITTY_WINDOW_ID").is_some() || term_program == "kitty" || term == "xterm-kitty" {
+        return Some(TerminalProtocol::Kitty);
+    }
+    if env("GHOSTTY_RESOURCES_DIR").is_some()
+        || env("WEZTERM_PANE").is_some()
+        || matches!(term_program.as_str(), "ghostty" | "wezterm")
+        || matches!(term.as_str(), "xterm-ghostty" | "wezterm")
+        || term.starts_with("foot")
+    {
+        return Some(TerminalProtocol::Osc777);
+    }
+    if term_program == "iterm.app"
+        || env("LC_TERMINAL").is_some_and(|value| value == "iTerm2")
+        || env("ITERM_SESSION_ID").is_some()
+    {
+        return Some(TerminalProtocol::Iterm);
+    }
+    None
+}
+
+fn in_tmux() -> bool {
+    std::env::var("TMUX").is_ok_and(|value| !value.trim().is_empty())
+}
+
 /// Ask the terminal to create the notification when it has a native protocol.
 ///
-/// On macOS, a notification emitted by `osascript` belongs to the helper
-/// process, so clicking it cannot identify, much less focus, the terminal pane
-/// that owns this session. Kitty retains that origin natively. The bundled
-/// broker records the controlling tty and uses it to return Terminal.app and
-/// iTerm2 users to the exact originating tab/session when one is exposed.
-#[cfg(target_os = "macos")]
+/// Kitty and OSC 777 terminals post the notification themselves, so a click
+/// focuses the exact originating pane, and it works over SSH. On macOS other
+/// terminals use the bundled broker, which records the tty to return Terminal.app
+/// and iTerm2 users to the originating tab.
 fn send_originating_terminal_notification(
     notification: &TurnNotification,
     session_id: &str,
     sound: Option<&str>,
 ) -> bool {
-    let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
-    let term = std::env::var("TERM").unwrap_or_default();
-    let is_kitty = term_program.eq_ignore_ascii_case("kitty") || term == "xterm-kitty";
-
-    // Kitty's OSC 99 path is strictly better than a generic helper because the
-    // terminal itself can focus the exact originating surface. All other macOS
-    // terminals use the LSUIElement broker when installed; it carries durable
-    // route metadata and can target Terminal.app/iTerm2 by tty on click.
-    if !is_kitty
+    let protocol = detect_terminal_protocol(|key| std::env::var(key).ok());
+    let tmux = in_tmux();
+    // tmux drops passthrough unless `allow-passthrough on`, so inside tmux the
+    // macOS broker is the reliable route.
+    let terminal_focuses_origin = matches!(
+        protocol,
+        Some(TerminalProtocol::Kitty | TerminalProtocol::Osc777)
+    ) && !tmux;
+    if !terminal_focuses_origin
         && crate::notifications::send_macos_turn_notification(
             &notification.title,
             notification.subtitle.as_deref(),
@@ -149,12 +185,18 @@ fn send_originating_terminal_notification(
         return true;
     }
 
-    let sequence = if is_kitty {
-        kitty_notification_sequence(notification, session_id)
-    } else if term_program.eq_ignore_ascii_case("iTerm.app") {
-        iterm_notification_sequence(notification)
-    } else {
+    let Some(protocol) = protocol else {
         return false;
+    };
+    let sequence = match protocol {
+        TerminalProtocol::Kitty => kitty_notification_sequence(notification, session_id),
+        TerminalProtocol::Osc777 => osc777_notification_sequence(notification),
+        TerminalProtocol::Iterm => iterm_notification_sequence(notification),
+    };
+    let sequence = if tmux {
+        tmux_passthrough(&sequence)
+    } else {
+        sequence
     };
 
     // This runs on the TUI event thread, after the completed turn has rendered,
@@ -163,16 +205,10 @@ fn send_originating_terminal_notification(
     stdout.write_all(sequence.as_bytes()).is_ok() && stdout.flush().is_ok()
 }
 
-#[cfg(not(target_os = "macos"))]
-fn send_originating_terminal_notification(
-    _notification: &TurnNotification,
-    _session_id: &str,
-    _sound: Option<&str>,
-) -> bool {
-    false
+fn tmux_passthrough(sequence: &str) -> String {
+    format!("\x1bPtmux;{}\x1b\\", sequence.replace('\x1b', "\x1b\x1b"))
 }
 
-#[cfg(any(target_os = "macos", test))]
 fn notification_text(notification: &TurnNotification) -> String {
     match notification.subtitle.as_deref() {
         Some(subtitle) => format!("{}\n{}", subtitle, notification.body),
@@ -180,12 +216,20 @@ fn notification_text(notification: &TurnNotification) -> String {
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
-fn osc_safe(text: &str) -> String {
-    text.chars().filter(|ch| !ch.is_control()).collect()
+/// OSC 9 and 777 payloads are single-line, so the subtitle joins the body.
+fn single_line_text(notification: &TurnNotification) -> String {
+    match notification.subtitle.as_deref() {
+        Some(subtitle) => format!("{} · {}", subtitle, notification.body),
+        None => notification.body.clone(),
+    }
 }
 
-#[cfg(any(target_os = "macos", test))]
+fn osc_safe(text: &str) -> String {
+    text.chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .collect()
+}
+
 fn kitty_notification_id(session_id: &str) -> String {
     let safe: String = session_id
         .chars()
@@ -198,7 +242,6 @@ fn kitty_notification_id(session_id: &str) -> String {
     )
 }
 
-#[cfg(any(target_os = "macos", test))]
 fn kitty_notification_sequence(notification: &TurnNotification, session_id: &str) -> String {
     // OSC 99 is Kitty's desktop-notification protocol. Notifications are tied
     // to the originating Kitty window, which is what makes click-to-focus work.
@@ -216,13 +259,19 @@ fn kitty_notification_sequence(notification: &TurnNotification, session_id: &str
     )
 }
 
-#[cfg(any(target_os = "macos", test))]
+fn osc777_notification_sequence(notification: &TurnNotification) -> String {
+    // The title ends at the first ';', the body takes the rest.
+    let title = osc_safe(&notification.title).replace(';', ",");
+    let body = osc_safe(&single_line_text(notification));
+    format!("\x1b]777;notify;{title};{body}\x07")
+}
+
 fn iterm_notification_sequence(notification: &TurnNotification) -> String {
     // iTerm2's OSC 9 notification is likewise associated with its source tab.
     let text = osc_safe(&format!(
         "{}: {}",
         notification.title,
-        notification_text(notification)
+        single_line_text(notification)
     ));
     format!("\x1b]9;{text}\x07")
 }
@@ -608,5 +657,59 @@ mod tests {
         let sequence = iterm_notification_sequence(&n);
         assert_eq!(sequence.matches('\x07').count(), 1);
         assert!(!sequence.contains("\x1b] title"));
+    }
+
+    #[test]
+    fn osc777_notification_keeps_title_and_body_apart() {
+        let n = TurnNotification {
+            title: "jcode · a;b".to_string(),
+            subtitle: Some("1/2 todos".to_string()),
+            body: "x;y\nz".to_string(),
+        };
+        assert_eq!(
+            osc777_notification_sequence(&n),
+            "\x1b]777;notify;jcode · a,b;1/2 todos · x;y z\x07"
+        );
+    }
+
+    #[test]
+    fn terminal_protocol_detected_over_ssh_and_tmux() {
+        let detect = |vars: &[(&str, &str)]| {
+            detect_terminal_protocol(|key| {
+                vars.iter()
+                    .find(|(name, _)| *name == key)
+                    .map(|(_, value)| value.to_string())
+            })
+        };
+        assert_eq!(
+            detect(&[("TERM", "xterm-ghostty")]),
+            Some(TerminalProtocol::Osc777)
+        );
+        assert_eq!(
+            detect(&[("TERM", "tmux-256color"), ("GHOSTTY_RESOURCES_DIR", "/x")]),
+            Some(TerminalProtocol::Osc777)
+        );
+        assert_eq!(detect(&[("TERM", "foot")]), Some(TerminalProtocol::Osc777));
+        assert_eq!(
+            detect(&[("WEZTERM_PANE", "0")]),
+            Some(TerminalProtocol::Osc777)
+        );
+        assert_eq!(
+            detect(&[("TERM", "xterm-kitty")]),
+            Some(TerminalProtocol::Kitty)
+        );
+        assert_eq!(
+            detect(&[("LC_TERMINAL", "iTerm2")]),
+            Some(TerminalProtocol::Iterm)
+        );
+        assert_eq!(detect(&[("TERM", "xterm-256color")]), None);
+    }
+
+    #[test]
+    fn tmux_passthrough_doubles_escapes() {
+        assert_eq!(
+            tmux_passthrough("\x1b]99;x\x1b\\"),
+            "\x1bPtmux;\x1b\x1b]99;x\x1b\x1b\\\x1b\\"
+        );
     }
 }
