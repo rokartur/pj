@@ -56,9 +56,7 @@ use unicode_width::UnicodeWidthStr;
 
 use commits::{commits_has_data, render_commits_widget};
 use frame::Framed;
-use git::{
-    changes_has_data, changes_height, changes_legend, render_changes_framed, render_git_widget,
-};
+use git::{changes_has_data, changes_height, changes_line, render_changes_framed};
 pub(crate) use git::{edited_paths_from_tool_call, resolve_edited_path};
 pub use graph::{GraphEdge, GraphNode, build_graph_topology, graph_node_score};
 pub(crate) use memory_utils::is_traceworthy_memory_event;
@@ -196,7 +194,7 @@ impl WidgetKind {
             WidgetKind::Compaction,
             WidgetKind::BackgroundTasks,
             WidgetKind::GitStatus,
-            WidgetKind::Commits,
+            // pj: no Commits widget.
             WidgetKind::SwarmStatus,
             WidgetKind::AmbientMode,
             WidgetKind::Tips,
@@ -1130,24 +1128,12 @@ fn swarm_dock_engaged(state: &WidgetsState) -> bool {
                 .any(|a| a.placement.kind == WidgetKind::SwarmStatus))
 }
 
-/// Whether the previous frame placed the overview (which merges the usage page)
-/// or the usage widget, so the footer need not repeat the limits.
-pub(crate) fn usage_limits_visible() -> bool {
-    get_or_init_state().as_ref().is_some_and(|state| {
-        state.enabled
-            && state
-                .placements
-                .iter()
-                .any(|p| matches!(p.kind, WidgetKind::Overview | WidgetKind::UsageLimits))
-    })
-}
-
 /// Whether the inline swarm strip (above the status line) should stand down
 /// because the SwarmStatus dock widget (margin HUD) is showing - or was very
 /// recently showing - the same agents.
 ///
 /// The strip is built before widget placement runs each frame, so this checks
-/// the previous frame's state, like [`usage_limits_visible`]. Engagement
+/// the previous frame's state, like [`widget_visible_facts`]. Engagement
 /// includes hidden-in-place anchors, and disengagement is debounced by
 /// [`SWARM_STRIP_STAND_DOWN_LINGER`]: both exist so the dock's frame-to-frame
 /// placement churn cannot toggle the strip row on and off, which resizes the
@@ -1464,11 +1450,6 @@ fn render_overview_framed(data: &InfoWidgetData, inner: Rect) -> Option<Framed> 
         InfoPageKind::MemoryExpanded => "Overview · memory",
     };
     let mut framed = Framed::body(lines).title(frame::label(title));
-    // The Changes section marks agent-edited files; explain the dot here since
-    // compact sections have no border of their own. Page dots keep the right.
-    if let Some(legend) = changes_legend(data, inner.height) {
-        framed = framed.footer(legend);
-    }
     if layout.show_dots {
         let mut dots: Vec<Span<'static>> = Vec::new();
         for i in 0..layout.pages.len() {
@@ -1661,7 +1642,7 @@ fn render_widget_content(kind: WidgetKind, data: &InfoWidgetData, inner: Rect) -
         WidgetKind::KvCache => render_kv_cache_widget(data, inner),
         WidgetKind::ModelInfo => render_model_widget(data, inner),
         WidgetKind::Tips => render_tips_widget(inner),
-        WidgetKind::GitStatus => render_changes_framed(data, inner),
+        WidgetKind::GitStatus => render_changes_framed(data),
         WidgetKind::Commits => render_commits_widget(data, inner),
     };
     framed.settle()
@@ -2144,9 +2125,8 @@ fn render_sections(
         lines.push(render_kv_cache_summary_line(cache));
     }
 
-    // Changed files (the detail behind the line's git counts).
-    if data.git_info.as_ref().is_some_and(changes_has_data) {
-        lines.extend(render_git_widget(data, inner));
+    if let Some(line) = data.git_info.as_ref().and_then(changes_line) {
+        lines.push(line);
     }
 
     lines

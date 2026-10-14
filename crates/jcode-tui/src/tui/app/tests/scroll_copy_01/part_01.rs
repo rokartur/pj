@@ -1555,86 +1555,21 @@ fn changes_widget_end_to_end_on_real_git_repo() {
     assert!(!init.unpushed, "no upstream means ahead=0");
     assert!(init.timestamp > 0 && init.hash.len() >= 7);
 
-    // Real App frame: transcript edited src/lib.rs relative to the repo.
+    // Real App frame: the overview carries one line of counts, no file rows.
+    let expected = format!(
+        "staged:1 unstaged:4 +{} −{}",
+        info.added_total, info.removed_total
+    );
     crate::tui::app::helpers::seed_git_info_cache_for_tests(Some(info));
     crate::tui::info_widget::clear_widget_placements_for_tests();
-    let (mut app, mut terminal) = create_scroll_test_app(140, 40, 0, 0);
-    app.session.working_dir = Some(root.join("src").to_string_lossy().into_owned());
-    app.display_messages.push(DisplayMessage::tool(
-        "ok",
-        crate::message::ToolCall {
-            id: "e1".into(),
-            name: "edit".into(),
-            input: serde_json::json!({"file_path": "lib.rs"}),
-            ..Default::default()
-        },
-    ));
-    app.bump_display_messages_version();
+    let (app, mut terminal) = create_scroll_test_app(140, 40, 0, 0);
     let mut frame = String::new();
     for _ in 0..3 {
         frame = render_and_snap(&app, &mut terminal);
     }
     crate::tui::app::helpers::seed_git_info_cache_for_tests(None);
-
-    let row = |needle: &str| {
-        frame
-            .lines()
-            .find(|l| l.contains(needle))
-            .unwrap_or_else(|| panic!("{needle:?} missing:\n{frame}"))
-            .to_string()
-    };
-    assert!(
-        row("lib.rs").contains("M● src/lib.rs"),
-        "agent dot on edited file:\n{frame}"
-    );
-    assert!(row("new_name.rs").contains("R  new_name.rs"), "{frame}");
-    assert!(row("gone.txt").contains("D  gone.txt"), "{frame}");
-    assert!(row("lib.rs").contains("+3 −1"), "{frame}");
-    assert!(
-        row("new.rs").contains("?  new.rs"),
-        "no dot on files agent did not edit:\n{frame}"
-    );
-    assert!(row("new.rs").contains("+3 −0"), "{frame}");
-    assert!(
-        !row("logo.bin").contains('+'),
-        "binary shows no counts:\n{frame}"
-    );
-    assert!(
-        frame.contains("● agent"),
-        "legend explains the dot when one is shown:\n{frame}"
-    );
-
-    // Without any agent edits there is no dot, so no legend either.
-    let info = crate::tui::app::helpers::gather_git_info_in(Some(&root)).expect("repo");
-    crate::tui::app::helpers::seed_git_info_cache_for_tests(Some(info));
-    crate::tui::info_widget::clear_widget_placements_for_tests();
-    let (app2, mut terminal2) = create_scroll_test_app(140, 40, 0, 0);
-    let mut frame2 = String::new();
-    for _ in 0..3 {
-        frame2 = render_and_snap(&app2, &mut terminal2);
-    }
-    crate::tui::app::helpers::seed_git_info_cache_for_tests(None);
-    assert!(frame2.contains("src/lib.rs"), "{frame2}");
-    assert!(!frame2.contains("● agent"), "{frame2}");
-    let changes_rows: Vec<_> = frame2
-        .lines()
-        .filter(|line| {
-            [
-                "src/lib.rs",
-                "new.rs",
-                "logo.bin",
-                "new_name.rs",
-                "gone.txt",
-            ]
-            .iter()
-            .any(|path| line.contains(path))
-        })
-        .collect();
-    assert_eq!(changes_rows.len(), 5, "{frame2}");
-    assert!(
-        changes_rows.iter().all(|line| !line.contains('●')),
-        "no agent-edit dot on clean Changes rows:\n{frame2}"
-    );
+    assert!(frame.contains(&expected), "{expected:?} missing:\n{frame}");
+    assert!(!frame.contains("gone.txt"), "no file rows:\n{frame}");
 }
 
 #[test]

@@ -1,18 +1,9 @@
-//! Changes widget: the detail layer behind the status line's git segment.
-//!
-//! The overscroll status line already owns the branch and the dirty/ahead
-//! counts (`main ~3 ?2 ↑1`). This widget never repeats those. It answers the
-//! follow-up question instead: *which* files are dirty.
+//! Changes widget: one line of working-tree and upstream counts.
 
 use super::frame::{self, Framed};
-use super::text::truncate_smart;
-use super::{DirtyFile, GitInfo, InfoWidgetData};
+use super::{GitInfo, InfoWidgetData};
 use crate::tui::color_support::rgb;
 use ratatui::prelude::*;
-
-/// Maximum file rows before collapsing the rest into a `+N more` row.
-pub(super) const CHANGES_MAX_FILES: usize = 5;
-
 /// Paths an edit-style tool call wrote to, as given in its input (absolute or
 /// relative to the session working directory). Non-edit tools yield nothing.
 pub(crate) fn edited_paths_from_tool_call(name: &str, input: &serde_json::Value) -> Vec<String> {
@@ -73,347 +64,90 @@ pub(crate) fn resolve_edited_path(path: &str, working_dir: Option<&str>) -> std:
     out
 }
 
-/// Whether a repo-relative dirty path is one the agent edited this session.
-pub(crate) fn is_agent_edited(
-    repo_root: Option<&std::path::Path>,
-    repo_path: &str,
-    edited: &std::collections::HashSet<std::path::PathBuf>,
-) -> bool {
-    let Some(root) = repo_root else {
-        return false;
-    };
-    let rel = repo_path
-        .rsplit(" -> ")
-        .next()
-        .unwrap_or(repo_path)
-        .trim_matches('"');
-    edited.contains(&root.join(rel.trim_end_matches('/')))
-}
-
-/// Color of the agent-edit marker, shared by the rows and the legend.
-pub(super) const AGENT_DOT_COLOR: (u8, u8, u8) = (186, 139, 255);
-
-/// Border legend explaining the agent marker, shown only when at least one
-/// visible row carries it so it never labels something absent.
-pub(super) fn changes_legend(data: &InfoWidgetData, inner_height: u16) -> Option<Line<'static>> {
-    let info = data.git_info.as_ref()?;
-    let rows = (inner_height as usize).min(CHANGES_MAX_FILES);
-    let root = info.repo_root.as_deref();
-    let any = info
-        .dirty_files
-        .iter()
-        .take(rows)
-        .any(|f| is_agent_edited(root, &f.path, &data.agent_edited));
-    any.then(|| {
-        let (r, g, b) = AGENT_DOT_COLOR;
-        Line::from(vec![
-            Span::styled("●", Style::default().fg(rgb(r, g, b))),
-            Span::styled(" agent", Style::default().fg(rgb(130, 130, 145))),
-        ])
-    })
-}
-
-/// Whether the Changes widget has anything to show. A clean tree (or one that
-/// is only ahead/behind) has no file detail, and the status line already
-/// covers ahead/behind.
-pub(super) fn changes_has_data(info: &GitInfo) -> bool {
-    !info.dirty_files.is_empty()
-}
-
-/// Content rows the Changes widget renders, mirroring [`render_git_widget`].
-pub(super) fn changes_height(info: &GitInfo) -> u16 {
-    if !changes_has_data(info) {
-        return 0;
-    }
-    // Overview section: up to CHANGES_MAX_FILES rows, the last of which
-    // becomes `+N more` when files overflow.
-    let total = info.dirty_total.max(info.dirty_files.len());
-    let shown = info.dirty_files.len().min(CHANGES_MAX_FILES);
-    if total > shown {
-        CHANGES_MAX_FILES.min(shown + 1) as u16
-    } else {
-        shown as u16
-    }
-}
-
-/// Standalone Changes widget. Border layout: `Changes` top-left, all-file
-/// `+410 −96` totals top-right, `+N more` bottom-left, agent legend
-/// bottom-right. Every body row is a file. The dirty-file count stays on the
-/// status line.
-pub(super) fn render_changes_framed(data: &InfoWidgetData, inner: Rect) -> Framed {
-    let Some(info) = &data.git_info else {
-        return Framed::default();
-    };
-    if !changes_has_data(info) {
-        return Framed::default();
-    }
-    let total = info.dirty_total.max(info.dirty_files.len());
-    let max_files = (inner.height as usize).min(CHANGES_MAX_FILES);
-    let lines = changes_file_lines(data, info, max_files, inner.width as usize);
-    let hidden = total.saturating_sub(lines.len());
-
-    let mut framed = Framed::body(lines).title(frame::label("Changes"));
-    if info.added_total + info.removed_total > 0 {
-        framed = framed.title_right(Line::from(vec![
-            Span::styled(
-                format!("+{}", info.added_total),
-                Style::default().fg(rgb(90, 170, 100)),
-            ),
-            Span::styled(
-                format!(" −{}", info.removed_total),
-                Style::default().fg(rgb(200, 100, 95)),
-            ),
-        ]));
-    }
-    if hidden > 0 {
-        framed = framed.footer(frame::more(hidden));
-    }
-    if let Some(legend) = changes_legend(data, inner.height) {
-        framed = framed.footer_right(legend);
-    }
-    framed
-}
-
-fn changes_file_lines(
-    data: &InfoWidgetData,
-    info: &GitInfo,
-    max_files: usize,
-    w: usize,
-) -> Vec<Line<'static>> {
-    let shown: Vec<&DirtyFile> = info.dirty_files.iter().take(max_files).collect();
-    // One shared column width for `+N −M`, so the counts line up.
-    let count_w = shown
-        .iter()
-        .map(|f| line_counts(f).map_or(0, |(a, r)| a.chars().count() + 1 + r.chars().count()))
-        .max()
-        .unwrap_or(0);
-    let root = info.repo_root.as_deref();
-    shown
-        .iter()
-        .map(|file| {
-            let agent = is_agent_edited(root, &file.path, &data.agent_edited);
-            changes_file_line(file, agent, count_w, w)
-        })
-        .collect()
-}
-
-/// Overview section rows (no border of its own): files plus an inline
-/// `+N more` row carrying the all-file totals.
-pub(super) fn render_git_widget(data: &InfoWidgetData, inner: Rect) -> Vec<Line<'static>> {
-    let Some(info) = &data.git_info else {
-        return Vec::new();
-    };
-    if !changes_has_data(info) {
-        return Vec::new();
-    }
-
-    let w = inner.width as usize;
-    let total = info.dirty_total.max(info.dirty_files.len());
-    let mut max_files = (inner.height as usize).min(CHANGES_MAX_FILES);
-    if total > max_files && max_files > 0 {
-        // Reserve the last row for the overflow count.
-        max_files -= 1;
-    }
-
-    let mut lines = changes_file_lines(data, info, max_files, w);
-
-    let hidden = total.saturating_sub(lines.len());
-    if hidden > 0 {
-        let dim = Style::default().fg(rgb(100, 100, 115));
-        let mut spans = vec![Span::styled(format!("  +{hidden} more"), dim)];
-        if info.added_total + info.removed_total > 0 {
-            let totals = format!("+{} −{} all", info.added_total, info.removed_total);
-            let used = 2 + format!("+{hidden} more").chars().count();
-            let pad = w.saturating_sub(used + totals.chars().count());
-            if pad >= 1 {
-                spans.push(Span::raw(" ".repeat(pad)));
-                spans.push(Span::styled(
-                    format!("+{}", info.added_total),
-                    Style::default().fg(rgb(90, 170, 100)),
-                ));
-                spans.push(Span::styled(
-                    format!(" −{}", info.removed_total),
-                    Style::default().fg(rgb(200, 100, 95)),
-                ));
-                spans.push(Span::styled(" all", dim));
-            }
-        }
-        lines.push(Line::from(spans));
-    }
-    lines
-}
-
-/// `(+added, −removed)` labels, or `None` when counts are unknown (binary).
-fn line_counts(file: &DirtyFile) -> Option<(String, String)> {
-    let added = file.added?;
-    let removed = file.removed.unwrap_or(0);
-    Some((format!("+{added}"), format!("−{removed}")))
-}
-
-fn changes_file_line(file: &DirtyFile, agent: bool, count_w: usize, width: usize) -> Line<'static> {
-    let (letter_color, path_color) = match file.status {
-        'A' => (rgb(100, 200, 100), rgb(170, 190, 170)),
-        'D' => (rgb(255, 120, 110), rgb(150, 130, 130)),
-        'R' => (rgb(140, 180, 255), rgb(160, 170, 190)),
-        'U' => (rgb(255, 90, 90), rgb(230, 170, 160)),
-        '?' => (rgb(120, 120, 135), rgb(130, 130, 145)),
-        _ => (rgb(240, 200, 80), rgb(170, 170, 180)),
-    };
-    // Layout: `M● name…   +84 −12`. Counts are dropped before the name gets
-    // unreadably short.
-    const PREFIX: usize = 3; // letter + agent marker + space
-    const MIN_NAME: usize = 8;
-    let show_counts = count_w > 0 && width >= PREFIX + MIN_NAME + 1 + count_w;
-    let name_w = if show_counts {
-        width - PREFIX - 1 - count_w
-    } else {
-        width.saturating_sub(PREFIX)
-    };
-    let name = truncate_smart(&changes_display_path(&file.path), name_w);
-    let name_len = unicode_width::UnicodeWidthStr::width(name.as_str());
-
-    let mut spans = vec![
-        Span::styled(
-            file.status.to_string(),
-            Style::default().fg(letter_color).bold(),
-        ),
-        if agent {
-            Span::styled("●", {
-                let (r, g, b) = AGENT_DOT_COLOR;
-                Style::default().fg(rgb(r, g, b))
-            })
-        } else {
-            Span::raw(" ")
-        },
-        Span::raw(" "),
-        Span::styled(name, Style::default().fg(path_color)),
+/// `staged:2 unstaged:5 +760 −380 ↑2 ↓1`, zero counts omitted. `None` when the
+/// tree is clean and in sync with its upstream.
+pub(super) fn changes_line(info: &GitInfo) -> Option<Line<'static>> {
+    let green = rgb(90, 170, 100);
+    let muted = rgb(130, 130, 145);
+    let badges = [
+        ("staged:", info.staged, green),
+        ("unstaged:", info.modified + info.untracked, rgb(240, 200, 80)),
+        ("+", info.added_total, green),
+        ("−", info.removed_total, rgb(200, 100, 95)),
+        ("↑", info.ahead, muted),
+        ("↓", info.behind, muted),
     ];
-    if show_counts {
-        let (a, r) = line_counts(file).unwrap_or_default();
-        let this_w = if a.is_empty() {
-            0
-        } else {
-            a.chars().count() + 1 + r.chars().count()
-        };
-        let pad = width.saturating_sub(PREFIX + name_len + this_w);
-        spans.push(Span::raw(" ".repeat(pad)));
-        if !a.is_empty() {
-            spans.push(Span::styled(a, Style::default().fg(rgb(90, 170, 100))));
-            spans.push(Span::raw(" "));
-            spans.push(Span::styled(r, Style::default().fg(rgb(200, 100, 95))));
+    let mut spans = Vec::new();
+    for (label, count, color) in badges {
+        if count == 0 {
+            continue;
         }
+        if !spans.is_empty() {
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::styled(
+            format!("{label}{count}"),
+            Style::default().fg(color),
+        ));
     }
-    Line::from(spans)
+    (!spans.is_empty()).then(|| Line::from(spans))
 }
 
-/// Show the file name first: the tail of the path is what identifies it in a
-/// narrow column. `crates/a/src/tool/mod.rs` becomes `tool/mod.rs` for
-/// generic names and `turn_execution.rs` otherwise. Renames keep the target.
-pub(super) fn changes_display_path(path: &str) -> String {
-    let path = path.rsplit(" -> ").next().unwrap_or(path).trim_matches('"');
-    let trimmed = path.trim_end_matches('/');
-    let mut segments = trimmed.rsplit('/');
-    let name = segments.next().unwrap_or(trimmed);
-    let generic = matches!(
-        name,
-        "mod.rs" | "lib.rs" | "main.rs" | "index.ts" | "index.js" | "__init__.py" | "Cargo.toml"
-    );
-    let base = match (generic, segments.next()) {
-        (true, Some(parent)) => format!("{parent}/{name}"),
-        _ => name.to_string(),
+pub(super) fn changes_has_data(info: &GitInfo) -> bool {
+    changes_line(info).is_some()
+}
+
+pub(super) fn changes_height(info: &GitInfo) -> u16 {
+    u16::from(changes_has_data(info))
+}
+
+pub(super) fn render_changes_framed(data: &InfoWidgetData) -> Framed {
+    let Some(line) = data.git_info.as_ref().and_then(changes_line) else {
+        return Framed::default();
     };
-    if path.ends_with('/') {
-        format!("{base}/")
-    } else {
-        base
-    }
+    Framed::body(vec![line]).title(frame::label("Changes"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn info(files: &[(char, &str)], total: usize) -> GitInfo {
-        GitInfo {
-            branch: "main".to_string(),
-            modified: files.len(),
-            staged: 0,
-            untracked: 0,
-            ahead: 1,
-            behind: 0,
-            dirty_files: files.iter().map(|(s, p)| DirtyFile::new(*s, *p)).collect(),
-            dirty_total: total,
-            ..Default::default()
-        }
-    }
-
-    fn text(lines: &[Line<'static>]) -> String {
-        lines
-            .iter()
-            .map(|l| {
-                l.spans
-                    .iter()
-                    .map(|s| s.content.as_ref())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+    fn text(line: &Line<'static>) -> String {
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
     }
 
     #[test]
-    fn changes_lists_files_without_repeating_branch_or_counts() {
-        let data = InfoWidgetData {
-            git_info: Some(info(
-                &[
-                    ('M', "crates/x/src/agent/turn_execution.rs"),
-                    ('?', "notes.md"),
-                ],
-                2,
-            )),
+    fn changes_line_shows_only_nonzero_counts_in_order() {
+        let git = GitInfo {
+            branch: "main".into(),
+            staged: 2,
+            modified: 3,
+            untracked: 1,
+            added_total: 760,
+            removed_total: 380,
+            ahead: 2,
+            behind: 1,
             ..Default::default()
         };
-        let out = text(&render_git_widget(&data, Rect::new(0, 0, 30, 5)));
-        assert!(out.contains("M  turn_execution.rs"), "{out}");
-        assert!(out.contains("?  notes.md"), "{out}");
-        assert!(
-            !out.contains("main"),
-            "branch belongs to the status line: {out}"
-        );
-        assert!(
-            !out.contains("↑1"),
-            "counts belong to the status line: {out}"
-        );
-    }
-
-    #[test]
-    fn changes_overflow_counts_files_beyond_the_capture_cap() {
-        let files: Vec<(char, &str)> = (0..10).map(|_| ('M', "a.rs")).collect();
-        let git = info(&files, 23);
-        let data = InfoWidgetData {
-            git_info: Some(git.clone()),
+        let line = changes_line(&git).expect("dirty tree");
+        assert_eq!(text(&line), "staged:2 unstaged:4 +760 −380 ↑2 ↓1");
+        let ahead_only = GitInfo {
+            ahead: 3,
             ..Default::default()
         };
-        let lines = render_git_widget(&data, Rect::new(0, 0, 30, 10));
-        assert_eq!(lines.len() as u16, changes_height(&git));
-        assert!(text(&lines).contains("+19 more"), "{}", text(&lines));
+        assert_eq!(text(&changes_line(&ahead_only).unwrap()), "↑3");
     }
 
     #[test]
-    fn clean_or_ahead_only_tree_has_no_changes_widget() {
-        assert!(!changes_has_data(&info(&[], 0)));
-        assert_eq!(changes_height(&info(&[], 0)), 0);
+    fn clean_tree_in_sync_has_no_changes_widget() {
+        let clean = GitInfo {
+            branch: "main".into(),
+            ..Default::default()
+        };
+        assert!(!changes_has_data(&clean));
+        assert_eq!(changes_height(&clean), 0);
     }
 
-    #[test]
-    fn display_path_keeps_parent_for_generic_names_and_rename_targets() {
-        assert_eq!(
-            changes_display_path("crates/a/src/tool/mod.rs"),
-            "tool/mod.rs"
-        );
-        assert_eq!(changes_display_path("src/foo.rs"), "foo.rs");
-        assert_eq!(changes_display_path("old.rs -> new/place.rs"), "place.rs");
-        assert_eq!(changes_display_path("scratch/"), "scratch/");
-    }
 
     #[test]
     fn porcelain_pairs_collapse_to_one_letter() {
@@ -427,94 +161,6 @@ mod tests {
         assert_eq!(l(b'R', b' '), 'R');
         assert_eq!(l(b'U', b'U'), 'U');
         assert_eq!(l(b'A', b'A'), 'U');
-    }
-
-    #[test]
-    fn line_counts_align_right_and_agent_edits_get_a_dot() {
-        let root = std::path::PathBuf::from("/repo");
-        let git = GitInfo {
-            dirty_files: vec![
-                DirtyFile::new('M', "src/agent/turn_execution.rs").with_lines(84, 12),
-                DirtyFile::new('M', "src/model_names.rs").with_lines(264, 8),
-                DirtyFile::new('?', "notes.md").with_lines(5, 0),
-            ],
-            dirty_total: 3,
-            repo_root: Some(root.clone()),
-            ..Default::default()
-        };
-        let data = InfoWidgetData {
-            git_info: Some(git),
-            agent_edited: std::sync::Arc::new(
-                [root.join("src/agent/turn_execution.rs")]
-                    .into_iter()
-                    .collect(),
-            ),
-            ..Default::default()
-        };
-        let lines = render_git_widget(&data, Rect::new(0, 0, 32, 5));
-        let rows: Vec<String> = lines
-            .iter()
-            .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
-            .collect();
-        assert!(rows[0].starts_with("M● turn_execution.rs"), "{rows:#?}");
-        assert!(rows[1].starts_with("M  model_names.rs"), "{rows:#?}");
-        assert!(rows[0].ends_with("+84 −12"), "{rows:#?}");
-        assert!(rows[1].ends_with("+264 −8"), "{rows:#?}");
-        for r in &rows {
-            assert_eq!(
-                unicode_width::UnicodeWidthStr::width(r.as_str()),
-                32,
-                "{r:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn overflow_row_reports_totals_across_all_files() {
-        let files: Vec<DirtyFile> = (0..10)
-            .map(|i| DirtyFile::new('M', format!("f{i}.rs")).with_lines(1, 1))
-            .collect();
-        let data = InfoWidgetData {
-            git_info: Some(GitInfo {
-                dirty_files: files,
-                dirty_total: 23,
-                added_total: 410,
-                removed_total: 96,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        let lines = render_git_widget(&data, Rect::new(0, 0, 32, 10));
-        let last: String = lines
-            .last()
-            .unwrap()
-            .spans
-            .iter()
-            .map(|s| s.content.as_ref())
-            .collect();
-        assert!(
-            last.contains("+19 more") && last.ends_with("+410 −96 all"),
-            "{last:?}"
-        );
-    }
-
-    #[test]
-    fn narrow_width_drops_counts_before_the_name() {
-        let data = InfoWidgetData {
-            git_info: Some(GitInfo {
-                dirty_files: vec![DirtyFile::new('M', "turn_execution.rs").with_lines(84, 12)],
-                dirty_total: 1,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        let row: String = render_git_widget(&data, Rect::new(0, 0, 16, 3))[0]
-            .spans
-            .iter()
-            .map(|s| s.content.as_ref())
-            .collect();
-        assert!(!row.contains("+84"), "{row:?}");
-        assert!(row.contains("turn_exec"), "{row:?}");
     }
 
     #[test]
@@ -543,14 +189,9 @@ mod tests {
     }
 
     #[test]
-    fn edited_paths_resolve_against_working_dir_and_match_repo_paths() {
+    fn edited_paths_resolve_against_working_dir() {
         let p = resolve_edited_path("../src/./a.rs", Some("/home/me/jcode/crates"));
         assert_eq!(p, std::path::PathBuf::from("/home/me/jcode/src/a.rs"));
-        let set: std::collections::HashSet<_> = [p].into_iter().collect();
-        let root = std::path::Path::new("/home/me/jcode");
-        assert!(is_agent_edited(Some(root), "src/a.rs", &set));
-        assert!(!is_agent_edited(Some(root), "src/b.rs", &set));
-        assert!(!is_agent_edited(None, "src/a.rs", &set));
     }
 
     #[test]
@@ -571,23 +212,7 @@ mod tests {
     #[ignore]
     fn real_repo_changes_widget() {
         let info = crate::tui::app::helpers::gather_git_info_inner().expect("inside a git repo");
-        let data = InfoWidgetData {
-            git_info: Some(info.clone()),
-            ..Default::default()
-        };
-        println!(
-            "dirty_total={} +{} -{}",
-            info.dirty_total, info.added_total, info.removed_total
-        );
-        for l in render_git_widget(&data, Rect::new(0, 0, 36, 5)) {
-            println!(
-                "|{}|",
-                l.spans
-                    .iter()
-                    .map(|s| s.content.as_ref())
-                    .collect::<String>()
-            );
-        }
+        println!("{:?}", changes_line(&info));
         assert!(info.repo_root.is_some());
         let ordered: Vec<_> = info.dirty_files.iter().map(|f| f.modified_at).collect();
         assert!(ordered.windows(2).all(|w| w[0] >= w[1]), "newest first");

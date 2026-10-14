@@ -1,10 +1,10 @@
 //! pj footer, ported from pi's status-footer: one row under the input, the
 //! place on the left and the session on the right.
 //!
-//!   ~/Developer/pj master unstaged:2 +1 -1   limit 5h 14% 7d 21%  ctx 42k (21%)  opus 4.8 high
+//!   ~/Developer/pj master unstaged:2 +1 -1   ctx 42k (21%)  opus 4.8 high
 
 use super::TuiState;
-use super::info_widget::{self, GitInfo, InfoWidgetData, UsageProvider};
+use super::info_widget::{GitInfo, InfoWidgetData};
 use crate::tui::session_facts;
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
@@ -26,18 +26,8 @@ pub(super) fn draw_footer(frame: &mut Frame, app: &dyn TuiState, area: Rect) {
     let data = app.info_widget_data();
     let session = session_spans(app, &data);
     let context = context_spans(&data);
-    // The floating overview already shows the limits.
-    let limits = if info_widget::usage_limits_visible() {
-        Vec::new()
-    } else {
-        limit_spans(&data)
-    };
-    // Narrow terminals drop the limits first, then the context; the model stays longest.
-    let rights = [
-        joined([limits, context.clone(), session.clone()]),
-        joined([context, session.clone()]),
-        session,
-    ];
+    // Limits live in the floating overview. Narrow terminals drop the context first.
+    let rights = [joined([context, session.clone()]), session];
     let line = row(place_spans(app, &data), rights, area.width as usize);
     let row_area = Rect {
         y: area.y + 1,
@@ -192,39 +182,6 @@ fn format_tokens(tokens: usize) -> String {
     }
 }
 
-/// Subscription windows as used percentages; API-key providers show their spend.
-fn limit_spans(data: &InfoWidgetData) -> Vec<Span<'static>> {
-    let Some(usage) = &data.usage_info else {
-        return Vec::new();
-    };
-    let muted = Style::default().fg(MUTED);
-    let text = Style::default().fg(TEXT);
-    match usage.provider {
-        UsageProvider::Anthropic | UsageProvider::OpenAI => {
-            let mut spans = vec![Span::styled("limit", muted)];
-            let windows = [
-                (
-                    usage.primary_limit_label.as_deref().unwrap_or("5h"),
-                    usage.five_hour,
-                ),
-                (
-                    usage.secondary_limit_label.as_deref().unwrap_or("7d"),
-                    usage.seven_day,
-                ),
-            ];
-            for (label, used) in windows {
-                spans.push(Span::styled(format!(" {label}"), muted));
-                spans.push(Span::styled(format!(" {:.0}%", used * 100.0), text));
-            }
-            spans
-        }
-        UsageProvider::CostBased if usage.total_cost > 0.0 => {
-            vec![Span::styled(format!("${:.2}", usage.total_cost), text)]
-        }
-        _ => Vec::new(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,19 +225,12 @@ mod tests {
     }
 
     #[test]
-    fn context_and_limits_read_like_pi() {
+    fn context_reads_like_pi() {
         let data = InfoWidgetData {
             observed_context_tokens: Some(42_000),
             context_limit: Some(200_000),
-            usage_info: Some(super::super::info_widget::UsageInfo {
-                provider: UsageProvider::Anthropic,
-                five_hour: 0.14,
-                seven_day: 0.21,
-                ..Default::default()
-            }),
             ..Default::default()
         };
         assert_eq!(text(&Line::from(context_spans(&data))), "ctx 42k (21%)");
-        assert_eq!(text(&Line::from(limit_spans(&data))), "limit 5h 14% 7d 21%");
     }
 }

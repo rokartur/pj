@@ -579,14 +579,6 @@ fn widgets_render_detail_layer_without_repeating_status_line_facts() {
         total_chars: 304_000,
         ..Default::default()
     });
-    if let Some(git) = state.info_widget_data.git_info.as_mut() {
-        git.dirty_files = vec![
-            info_widget::DirtyFile::new('M', "crates/a/src/agent/turn_execution.rs"),
-            info_widget::DirtyFile::new('?', "notes.md"),
-        ];
-        git.dirty_total = 2;
-    }
-
     let mut terminal = Terminal::new(TestBackend::new(160, 40)).expect("test terminal");
     // The Updates box is a widget box too and lists the build's latest commit
     // subjects; pin it empty so a subject like "… main …" cannot fail the scan.
@@ -614,12 +606,12 @@ fn widgets_render_detail_layer_without_repeating_status_line_facts() {
     assert!(!widgets.is_empty(), "expected widgets:\n{frame}");
 
     assert!(
-        widgets.contains("turn_execution.rs"),
-        "Changes detail:\n{frame}"
+        widgets.contains("unstaged:5 ↑1"),
+        "Changes line:\n{frame}"
     );
     assert!(widgets.contains("62 tok/s"), "Runtime detail:\n{frame}");
     for owned in [
-        "GPT-5.6", "74k", "256k", "29%", "OAuth", "OpenAI", "main", "~3", "↑1",
+        "GPT-5.6", "74k", "256k", "29%", "OAuth", "OpenAI", "main", "~3",
     ] {
         assert!(
             !widgets.contains(owned),
