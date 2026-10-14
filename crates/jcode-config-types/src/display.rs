@@ -124,7 +124,7 @@ pub struct DisplayConfig {
     pub resume_project_scope: bool,
     /// Usage percentage wording: "left" (default) or "used".
     pub usage_display: String,
-    /// Account name in the Overview quota row: "label" (default, e.g. claude-fox) or "email".
+    /// Account name in the Overview quota row: "email" (default, the part before @) or "label" (e.g. claude-fox).
     pub account_name: String,
 }
 impl Default for DisplayConfig {
@@ -165,7 +165,7 @@ impl Default for DisplayConfig {
             external_sessions: true,
             resume_project_scope: false,
             usage_display: "left".to_string(),
-            account_name: "label".to_string(),
+            account_name: "email".to_string(),
         }
     }
 }

@@ -85,7 +85,8 @@ async fn refresh() {
     }
 }
 
-/// An account saved before pj recorded emails has none; its label stands in.
+/// The part of the account email before `@`; an account saved before pj recorded
+/// emails has none, so its label stands in.
 fn display_name(label: &str) -> String {
     if !crate::config::config().display.account_name_email() {
         return label.to_string();
@@ -94,6 +95,7 @@ fn display_name(label: &str) -> String {
         .ok()
         .and_then(|accounts| accounts.into_iter().find(|account| account.label == label))
         .and_then(|account| account.email)
+        .and_then(|email| email.split('@').next().map(str::to_string))
         .unwrap_or_else(|| label.to_string())
 }
 
