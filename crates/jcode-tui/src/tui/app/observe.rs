@@ -126,6 +126,12 @@ impl App {
                 | "patch"
                 | "apply_patch"
                 | "replace"
+                | "replace_all"
+                | "replace_match"
+                | "insert"
+                | "move"
+                | "copy"
+                | "undo_last_change"
                 | "batch"
                 | "run_shell"
         );

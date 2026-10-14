@@ -1209,6 +1209,27 @@ fn test_context_command_reports_session_context_snapshot() {
 }
 
 #[test]
+fn test_context_size_command_caps_the_meter_and_persists() {
+    with_temp_jcode_home(|| {
+        let mut app = create_test_app();
+
+        app.input = "/context 500k".to_string();
+        app.submit_input();
+
+        assert_eq!(crate::config::config().compaction.max_context_tokens, 500_000);
+        app.set_context_limit_and_sync_budget(1_000_000);
+        assert_eq!(app.context_limit, 500_000);
+
+        app.input = "/context 1m".to_string();
+        app.submit_input();
+
+        assert_eq!(crate::config::config().compaction.max_context_tokens, 0);
+        app.set_context_limit_and_sync_budget(1_000_000);
+        assert_eq!(app.context_limit, 1_000_000);
+    });
+}
+
+#[test]
 fn test_nested_command_suggestions_filter_partial_suffixes() {
     let app = create_test_app();
 

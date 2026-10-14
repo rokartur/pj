@@ -4,7 +4,7 @@ use super::tools_ui::{get_tool_activity_detail, summarize_batch_running_tools_co
 use super::visual_debug::{self, FrameCaptureBuilder};
 use super::{
     ProcessingStatus, TuiState, accent_color, ai_color, asap_color, dim_color, pending_color,
-    queued_color, rainbow_prompt_color, user_color,
+    queued_color, user_color,
 };
 use crate::message::ConnectionPhase;
 use crate::tui::app;
@@ -12,7 +12,6 @@ use crate::tui::color_support::rgb;
 use crate::tui::detect_kv_cache_problem;
 use crate::tui::info_widget::occasional_status_tip;
 use crate::tui::layout_utils;
-use crate::tui::session_facts;
 use ratatui::{prelude::*, style::Modifier, widgets::Paragraph};
 
 fn shell_mode_color() -> Color {
@@ -421,38 +420,28 @@ pub(super) fn input_prompt(app: &dyn TuiState) -> (&'static str, Color) {
     } else if app.active_skill().is_some() {
         ("» ", accent_color())
     } else {
-        ("> ", user_color())
+        (super::prepare::USER_RAIL, user_color())
     }
 }
 
-pub(crate) fn input_prompt_len(app: &dyn TuiState, next_prompt: usize) -> usize {
+pub(crate) fn input_prompt_len(app: &dyn TuiState) -> usize {
     let (prompt_char, _) = input_prompt(app);
-    next_prompt.to_string().chars().count() + prompt_char.chars().count()
+    unicode_width::UnicodeWidthStr::width(prompt_char)
 }
 
-pub(crate) fn next_input_prompt_number(app: &dyn TuiState) -> usize {
-    app.display_user_message_count() + 1
-}
-
-pub(super) fn wrapped_input_line_count(
-    app: &dyn TuiState,
-    area_width: u16,
-    next_prompt: usize,
-) -> usize {
+pub(super) fn wrapped_input_line_count(app: &dyn TuiState, area_width: u16) -> usize {
     let reserved_width = send_mode_reserved_width(app);
-    let prompt_len = input_prompt_len(app, next_prompt);
+    let prompt_len = input_prompt_len(app);
     let line_width = (area_width as usize).saturating_sub(prompt_len + reserved_width);
     if line_width == 0 {
         return 1;
     }
 
-    let num_str = next_prompt.to_string();
     let (prompt_char, caret_color) = input_prompt(app);
     let (lines, _, _) = wrap_input_text(
         app.input(),
         app.cursor_pos(),
         line_width,
-        &num_str,
         prompt_char,
         caret_color,
         prompt_len,
@@ -516,7 +505,7 @@ pub(super) fn pending_queue_preview(app: &dyn TuiState) -> Vec<String> {
     previews
 }
 
-pub(super) fn draw_queued(frame: &mut Frame, app: &dyn TuiState, area: Rect, start_num: usize) {
+pub(super) fn draw_queued(frame: &mut Frame, app: &dyn TuiState, area: Rect) {
     let mut items: Vec<(QueuedMsgType, &str)> = Vec::new();
     if app.is_processing() {
         for msg in app.pending_soft_interrupts() {
@@ -537,15 +526,11 @@ pub(super) fn draw_queued(frame: &mut Frame, app: &dyn TuiState, area: Rect, sta
         items.push((QueuedMsgType::Queued, msg.as_str()));
     }
 
-    let pending_count = items.len();
     let lines: Vec<Line> = items
         .iter()
         .take(3)
-        .enumerate()
-        .map(|(i, (msg_type, msg))| {
+        .map(|(msg_type, msg)| {
             let normalized_msg = normalize_repaint_sensitive_notice_text(msg);
-            let distance = pending_count.saturating_sub(i);
-            let num_color = rainbow_prompt_color(distance);
             let (indicator, indicator_color, msg_color, dim) = match msg_type {
                 QueuedMsgType::Pending => ("↻", pending_color(), pending_color(), false),
                 QueuedMsgType::Interleave => ("⚡", asap_color(), asap_color(), false),
@@ -556,8 +541,6 @@ pub(super) fn draw_queued(frame: &mut Frame, app: &dyn TuiState, area: Rect, sta
                 msg_style = msg_style.dim();
             }
             Line::from(vec![
-                Span::styled(format!("{}", start_num + i), Style::default().fg(num_color)),
-                Span::raw(" "),
                 Span::styled(indicator, Style::default().fg(indicator_color)),
                 Span::raw(" "),
                 Span::styled(normalized_msg, msg_style),
@@ -784,7 +767,30 @@ fn append_batch_progress_spans(
     }
 }
 
-pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pending_count: usize) {
+/// Rows the status area takes: a status with text gets a blank row above and below.
+pub(super) fn status_height(line: &Line) -> u16 {
+    if line.width() > 0 { 3 } else { 1 }
+}
+
+/// The text row inside an area sized by [`status_height`].
+pub(super) fn status_text_area(area: Rect) -> Rect {
+    Rect {
+        y: area.y + area.height / 2,
+        height: area.height.min(1),
+        ..area
+    }
+}
+
+pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, line: Line<'static>) {
+    crate::memory::check_staleness();
+    if app.centered_mode() {
+        frame.render_widget(Paragraph::new(line.alignment(Alignment::Center)), area);
+        return;
+    }
+    frame.render_widget(Paragraph::new(line), area);
+}
+
+pub(super) fn status_line(app: &dyn TuiState, width: u16, pending_count: usize) -> Line<'static> {
     let elapsed = app.elapsed().map(|d| d.as_secs_f32()).unwrap_or(0.0);
     let stale_secs = app.time_since_activity().map(|d| d.as_secs_f32());
     let (cache_read, cache_creation) = app.streaming_cache_tokens();
@@ -1046,7 +1052,7 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
             total,
             app.session_compaction_count(),
             app.context_limit(),
-            area.width as usize,
+            width as usize,
             app.animation_elapsed() as u64,
         ) {
             let severe_token_threshold = app
@@ -1065,29 +1071,20 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 Span::styled(warning, Style::default().fg(warning_color)),
             ])
         } else if let Some(tip) =
-            occasional_status_tip(area.width as usize, app.animation_elapsed() as u64)
+            occasional_status_tip(width as usize, app.animation_elapsed() as u64)
         {
             Line::from(vec![Span::styled(tip, Style::default().fg(dim_color()))])
         } else {
             Line::from("")
         }
     } else {
-        if let Some(tip) =
-            occasional_status_tip(area.width as usize, app.animation_elapsed() as u64)
-        {
+        if let Some(tip) = occasional_status_tip(width as usize, app.animation_elapsed() as u64) {
             Line::from(vec![Span::styled(tip, Style::default().fg(dim_color()))])
         } else {
             Line::from("")
         }
     };
-
-    crate::memory::check_staleness();
-
-    if app.centered_mode() {
-        frame.render_widget(Paragraph::new(line.alignment(Alignment::Center)), area);
-        return;
-    }
-    frame.render_widget(Paragraph::new(line), area);
+    line
 }
 
 fn running_tool_header_spans(
@@ -1235,18 +1232,6 @@ mod tests {
     }
 
     #[test]
-    fn swarm_effort_model_status_uses_shared_label() {
-        for mode in ["swarm", "swarm-deep"] {
-            assert_eq!(
-                overscroll_short_reasoning(mode),
-                Some(crate::tui::app::effort_display_label(mode))
-            );
-        }
-        assert_eq!(overscroll_short_reasoning(" high "), Some("high"));
-        assert_eq!(overscroll_short_reasoning(" "), None);
-    }
-
-    #[test]
     fn running_tool_header_emphasizes_detail_over_tool_name() {
         let accent = Color::Rgb(12, 34, 56);
         let spans = running_tool_header_spans("*", "bash", Some("cargo test"), accent);
@@ -1282,17 +1267,6 @@ mod tests {
         assert_eq!(visual_line_move(input, input.len(), 10, -1), Some(2));
         // From far along row 0, down clamps to the end of the short row.
         assert_eq!(visual_line_move(input, 8, 10, 1), Some(input.len()));
-    }
-
-    #[test]
-    fn overscroll_provider_display_is_credential_neutral() {
-        // The credential (OAuth vs API key) is reported by the adjacent auth
-        // chip from canonical resolution; the provider name must not bake in a
-        // credential or the two can contradict (e.g. "Claude OAuth · API key").
-        assert_eq!(overscroll_provider_display("claude"), "Claude");
-        assert_eq!(overscroll_provider_display("anthropic"), "Anthropic");
-        assert!(!overscroll_provider_display("claude").contains("OAuth"));
-        assert!(!overscroll_provider_display("anthropic").contains("API"));
     }
 
     #[test]
@@ -1953,512 +1927,10 @@ pub(super) fn draw_notification(frame: &mut Frame, app: &dyn TuiState, area: Rec
     frame.render_widget(Paragraph::new(notification_lines(app, area.width)), area);
 }
 
-/// Draw the session status line, pinned directly below the input. Shows the
-/// directory, branch, git status, context usage, access method, provider, and
-/// model, compacting facts step by step as the terminal narrows.
-pub(super) fn draw_overscroll_status(frame: &mut Frame, app: &dyn TuiState, area: Rect) {
-    if area.height == 0 || area.width == 0 {
-        return;
-    }
-    let data = app.info_widget_data();
-
-    let model = data
-        .model
-        .clone()
-        .filter(|m| !m.is_empty())
-        .unwrap_or_else(|| app.provider_model());
-    let provider = data
-        .provider_name
-        .clone()
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| app.provider_name());
-    let facts = OverscrollFacts {
-        dir: app.working_dir().and_then(|d| overscroll_dir_label(&d)),
-        branch: overscroll_git_branch(&data),
-        git: data.git_info.clone(),
-        context: overscroll_context_usage(&data),
-        auth: overscroll_auth_label(data.auth_method),
-        provider: (!provider.is_empty() && !overscroll_is_runtime_placeholder(&provider))
-            .then(|| overscroll_provider_display(&provider)),
-        model: (!model.is_empty() && !overscroll_is_placeholder(&model))
-            .then(|| session_facts::pretty_model(&model)),
-        effort: data
-            .reasoning_effort
-            .as_deref()
-            .and_then(overscroll_short_reasoning)
-            .map(str::to_string),
-    };
-
-    let alignment = if app.centered_mode() {
-        Alignment::Center
-    } else {
-        Alignment::Right
-    };
-    let (spans, _) = overscroll_fit_facts(&facts, area.width as usize);
-    if spans.is_empty() {
-        return;
-    }
-    let line = Line::from(spans).alignment(alignment);
-    frame.render_widget(Paragraph::new(line), area);
-}
-
-/// Model name color on the overscroll status line.
-const OVERSCROLL_MODEL_PINK: Color = Color::Rgb(255, 135, 200);
-
-/// Raw facts for the overscroll status line, before width fitting.
-struct OverscrollFacts {
-    dir: Option<String>,
-    branch: Option<String>,
-    git: Option<crate::tui::info_widget::GitInfo>,
-    context: Option<(usize, usize)>,
-    auth: Option<(&'static str, Color)>,
-    provider: Option<String>,
-    model: Option<String>,
-    effort: Option<String>,
-}
-
-/// Per-fact detail level. 0 is the fullest form. Higher levels are more
-/// compact, and the last level of each optional fact hides it.
-#[derive(Clone, Copy, Default)]
-struct OverscrollLevels {
-    dir: u8,
-    branch: u8,
-    git: u8,
-    context: u8,
-    auth: u8,
-    provider: u8,
-    model: u8,
-}
-
-/// Compaction ladder, applied one step at a time until the line fits.
-///
-/// Priority (most to least important): directory, model, context usage,
-/// git branch, git status, provider, auth. Low-value facts are shortened or
-/// hidden first. The directory, model, and context usage are never hidden,
-/// only shortened, so the line always answers "where am I, what am I running,
-/// how full is the context".
-const OVERSCROLL_LADDER: &[fn(&mut OverscrollLevels)] = &[
-    |l| l.auth = 1,     // hide auth ("OAuth"/"API key")
-    |l| l.git = 1,      // "~3 +1 ?2 ↑1" -> "±6 ↑1"
-    |l| l.context = 1,  // "74k/256k ▰▰▰▱▱▱▱▱▱▱ 29%" -> "▰▱▱▱ 29%"
-    |l| l.branch = 1,   // long branch -> 12 chars
-    |l| l.provider = 1, // hide provider
-    |l| l.context = 2,  // "▰▱▱▱ 29%" -> "29%"
-    |l| l.git = 2,      // hide git status
-    |l| l.branch = 2,   // hide branch
-    |l| l.model = 1,    // drop reasoning effort
-    |l| l.dir = 1,      // "~/…/jcode" -> "jcode"
-];
-
-fn overscroll_fact_spans(
-    facts: &OverscrollFacts,
-    levels: OverscrollLevels,
-) -> Vec<Vec<Span<'static>>> {
-    let muted = Style::default().fg(rgb(140, 140, 150));
-    let mut out: Vec<Vec<Span<'static>>> = Vec::new();
-
-    if let Some(dir) = &facts.dir {
-        let label = if levels.dir == 0 {
-            dir.clone()
-        } else {
-            dir.rsplit('/')
-                .find(|seg| !seg.is_empty())
-                .unwrap_or(dir)
-                .to_string()
-        };
-        out.push(vec![
-            Span::styled(" ", Style::default().fg(rgb(140, 180, 255))),
-            Span::styled(label, muted),
-        ]);
-    }
-
-    if let Some(branch) = &facts.branch {
-        let label = match levels.branch {
-            0 => Some(branch.clone()),
-            1 => Some(overscroll_truncate_label(branch, 12)),
-            _ => None,
-        };
-        if let Some(label) = label {
-            out.push(vec![Span::styled(
-                format!(" {label}"),
-                Style::default().fg(rgb(150, 170, 140)),
-            )]);
-        }
-    }
-
-    if let Some(git) = &facts.git
-        && let Some(spans) = overscroll_git_status_spans(git, levels.git)
-    {
-        out.push(spans);
-    }
-
-    if let Some((used, limit)) = facts.context {
-        match levels.context {
-            // Roomy: token counts plus the full-width bar.
-            0 => {
-                let mut group = vec![Span::styled(
-                    format!(
-                        "{}/{} ",
-                        overscroll_format_tokens(used),
-                        overscroll_format_tokens(limit)
-                    ),
-                    muted,
-                )];
-                group.extend(overscroll_context_bar(
-                    used,
-                    limit,
-                    OVERSCROLL_CONTEXT_CELLS_FULL,
-                ));
-                out.push(group);
-            }
-            // Compact bar plus percentage.
-            1 => out.push(overscroll_context_bar(
-                used,
-                limit,
-                OVERSCROLL_CONTEXT_CELLS_COMPACT,
-            )),
-            // Percentage only (the colored last span of the bar).
-            _ => out.push(
-                overscroll_context_bar(used, limit, 0)
-                    .into_iter()
-                    .last()
-                    .map(|span| Span::styled(span.content.trim_start().to_string(), span.style))
-                    .into_iter()
-                    .collect(),
-            ),
-        }
-    }
-
-    if levels.auth == 0
-        && let Some((label, color)) = facts.auth
-    {
-        out.push(vec![Span::styled(
-            label.to_string(),
-            Style::default().fg(color),
-        )]);
-    }
-
-    if levels.provider == 0
-        && let Some(provider) = &facts.provider
-    {
-        out.push(vec![Span::styled(provider.clone(), muted)]);
-    }
-
-    if let Some(model) = &facts.model {
-        let mut group = vec![Span::styled(
-            model.clone(),
-            Style::default().fg(OVERSCROLL_MODEL_PINK).bold(),
-        )];
-        if levels.model == 0
-            && let Some(effort) = &facts.effort
-        {
-            group.push(Span::styled(format!(" {effort}"), muted));
-        }
-        out.push(group);
-    }
-
-    out
-}
-
-/// Fit the facts into `max_width` by walking the compaction ladder. Returns
-/// the spans and whether they fit without last-resort character truncation.
-fn overscroll_fit_facts(facts: &OverscrollFacts, max_width: usize) -> (Vec<Span<'static>>, bool) {
-    use unicode_width::UnicodeWidthStr;
-    let render = |levels: OverscrollLevels| {
-        let mut out: Vec<Span<'static>> = Vec::new();
-        for group in overscroll_fact_spans(facts, levels) {
-            if !out.is_empty() {
-                out.push(Span::raw(" "));
-            }
-            out.extend(group);
-        }
-        out
-    };
-    let width = |spans: &[Span<'static>]| spans.iter().map(|s| s.content.width()).sum::<usize>();
-
-    let mut levels = OverscrollLevels::default();
-    let mut spans = render(levels);
-    for step in OVERSCROLL_LADDER {
-        if width(&spans) <= max_width {
-            return (spans, true);
-        }
-        step(&mut levels);
-        spans = render(levels);
-    }
-    if width(&spans) <= max_width {
-        return (spans, true);
-    }
-    (overscroll_truncate_spans(spans, max_width), false)
-}
-
-fn overscroll_truncate_label(label: &str, max_chars: usize) -> String {
-    if label.chars().count() <= max_chars {
-        return label.to_string();
-    }
-    let mut out: String = label.chars().take(max_chars.saturating_sub(1)).collect();
-    out.push('…');
-    out
-}
-
-/// Truncate a list of spans to at most `max_width` display columns, appending a
-/// single-cell ellipsis when content is dropped. Preserves per-span styling.
-fn overscroll_truncate_spans(spans: Vec<Span<'static>>, max_width: usize) -> Vec<Span<'static>> {
-    use unicode_width::UnicodeWidthStr;
-    if max_width == 0 {
-        return Vec::new();
-    }
-    let total: usize = spans.iter().map(|s| s.content.width()).sum();
-    if total <= max_width {
-        return spans;
-    }
-    // Leave room for a trailing ellipsis.
-    let budget = max_width.saturating_sub(1);
-    let mut out: Vec<Span<'static>> = Vec::new();
-    let mut used = 0usize;
-    for span in spans {
-        let w = span.content.width();
-        if used + w <= budget {
-            used += w;
-            out.push(span);
-            continue;
-        }
-        // Partial: take as many chars as fit within the remaining budget.
-        let remaining = budget - used;
-        if remaining > 0 {
-            let mut taken = String::new();
-            let mut tw = 0usize;
-            for ch in span.content.chars() {
-                let cw = UnicodeWidthStr::width(ch.to_string().as_str());
-                if tw + cw > remaining {
-                    break;
-                }
-                tw += cw;
-                taken.push(ch);
-            }
-            if !taken.is_empty() {
-                out.push(Span::styled(taken, span.style));
-            }
-        }
-        break;
-    }
-    out.push(Span::styled("…", Style::default().fg(rgb(100, 100, 110))));
-    out
-}
-
-/// Format a working dir path home-relative (~/foo/bar), keeping the last 2 segments.
-/// Compact git branch label for the status line and fact stack. Truncated so
-/// long branch names cannot crowd out the other facts.
-fn overscroll_git_branch(data: &crate::tui::info_widget::InfoWidgetData) -> Option<String> {
-    let branch = data.git_info.as_ref()?.branch.trim();
-    if branch.is_empty() {
-        return None;
-    }
-    let mut label: String = branch.chars().take(24).collect();
-    if branch.chars().count() > 24 {
-        label.push('…');
-    }
-    Some(label)
-}
-
-/// Git status counts using the git widget palette. Level 0 is the full
-/// `~modified +staged ?untracked ↑ahead ↓behind` form, level 1 collapses the
-/// local changes into a single `±N` count, and level 2 hides it. `None` when
-/// the tree is clean and in sync.
-fn overscroll_git_status_spans(
-    info: &crate::tui::info_widget::GitInfo,
-    level: u8,
-) -> Option<Vec<Span<'static>>> {
-    let parts: Vec<(usize, &str, Color)> = match level {
-        0 => vec![
-            (info.modified, "~", rgb(240, 200, 80)),
-            (info.staged, "+", rgb(100, 200, 100)),
-            (info.untracked, "?", rgb(140, 140, 150)),
-            (info.ahead, "↑", rgb(100, 200, 100)),
-            (info.behind, "↓", rgb(255, 140, 100)),
-        ],
-        1 => vec![
-            (
-                info.modified + info.staged + info.untracked,
-                "±",
-                rgb(240, 200, 80),
-            ),
-            (info.ahead, "↑", rgb(100, 200, 100)),
-            (info.behind, "↓", rgb(255, 140, 100)),
-        ],
-        _ => return None,
-    };
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    for (count, symbol, color) in parts {
-        if count == 0 {
-            continue;
-        }
-        if !spans.is_empty() {
-            spans.push(Span::raw(" "));
-        }
-        spans.push(Span::styled(
-            format!("{symbol}{count}"),
-            Style::default().fg(color),
-        ));
-    }
-    (!spans.is_empty()).then_some(spans)
-}
-
-fn overscroll_dir_label(path: &str) -> Option<String> {
-    session_facts::dir_label_short(path)
-}
-
-/// Placeholder header strings used during remote startup; not real model names.
-fn overscroll_is_placeholder(model: &str) -> bool {
-    let m = model.trim().to_ascii_lowercase();
-    m.starts_with("connecting")
-        || m.starts_with("loading")
-        || m == "connected"
-        || m.contains("connecting to server")
-}
-
-/// Inert runtime provider labels (remote/replay/test-harness) shown before the
-/// real provider name is known; not real provider names.
-fn overscroll_is_runtime_placeholder(provider: &str) -> bool {
-    matches!(
-        provider.trim().to_ascii_lowercase().as_str(),
-        "remote" | "replay" | "test-harness"
-    )
-}
-
-fn overscroll_provider_display(provider: &str) -> String {
-    match provider.to_ascii_lowercase().as_str() {
-        // Keep provider labels credential-neutral: the adjacent auth chip
-        // (`overscroll_auth_label`) reports OAuth vs API key from the canonical
-        // credential resolution. Baking a credential into the provider name
-        // used to produce contradictions like "Claude OAuth · API key" when
-        // the Anthropic route was pinned to the API key.
-        "claude" => "Claude".to_string(),
-        "anthropic" => "Anthropic".to_string(),
-        "openai" => "OpenAI".to_string(),
-        "openrouter" => "OpenRouter".to_string(),
-        "opencode" => "OpenCode".to_string(),
-        "gemini" => "Gemini".to_string(),
-        "copilot" => "GitHub Copilot".to_string(),
-        "cursor" => "Cursor".to_string(),
-        "bedrock" => "AWS Bedrock".to_string(),
-        "antigravity" => "Antigravity".to_string(),
-        _ => provider.to_string(),
-    }
-}
-
-fn overscroll_auth_label(
-    method: crate::tui::info_widget::AuthMethod,
-) -> Option<(&'static str, Color)> {
-    use crate::tui::info_widget::AuthMethod;
-    match method {
-        AuthMethod::Unknown => None,
-        AuthMethod::ApiKey | AuthMethod::AnthropicApiKey | AuthMethod::OpenAIApiKey => {
-            Some(("API key", rgb(180, 180, 190)))
-        }
-        AuthMethod::OpenRouterApiKey | AuthMethod::OpenCodeApiKey => {
-            Some(("API key", rgb(140, 180, 255)))
-        }
-        AuthMethod::AnthropicOAuth => Some(("OAuth", rgb(255, 160, 100))),
-        AuthMethod::OpenAIOAuth => Some(("OAuth", rgb(100, 200, 180))),
-        AuthMethod::CopilotOAuth => Some(("OAuth", rgb(110, 200, 140))),
-        AuthMethod::GeminiOAuth => Some(("OAuth", rgb(120, 190, 255))),
-    }
-}
-
-fn overscroll_short_reasoning(effort: &str) -> Option<&str> {
-    let effort = effort.trim();
-    if effort.is_empty() {
-        return None;
-    }
-    Some(match effort {
-        "swarm" | "swarm-deep" => crate::tui::app::effort_display_label(effort),
-        "max" => "max",
-        "xhigh" => "xhigh",
-        "high" => "high",
-        "medium" => "medium",
-        "low" => "low",
-        "none" => "none",
-        other => other,
-    })
-}
-
-fn overscroll_context_usage(
-    data: &crate::tui::info_widget::InfoWidgetData,
-) -> Option<(usize, usize)> {
-    let used_tokens = if let Some(observed) = data.observed_context_tokens {
-        observed as usize
-    } else {
-        let info = data.context_info.as_ref()?;
-        if info.total_chars == 0 {
-            return None;
-        }
-        info.estimated_tokens()
-    };
-    let limit = data
-        .context_limit
-        .unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT)
-        .max(1);
-    Some((used_tokens, limit))
-}
-
-/// Format a token count compactly: 1234 -> "1.2k", 200000 -> "200k", 1_500_000 -> "1.5M".
-fn overscroll_format_tokens(tokens: usize) -> String {
-    if tokens >= 1_000_000 {
-        format!("{:.1}M", tokens as f64 / 1_000_000.0)
-    } else if tokens >= 10_000 {
-        format!("{}k", tokens / 1000)
-    } else if tokens >= 1_000 {
-        format!("{:.1}k", tokens as f64 / 1000.0)
-    } else {
-        tokens.to_string()
-    }
-}
-
-/// Render a compact rounded progress bar (◖████░░◗) plus a percentage label.
-fn overscroll_context_bar(used: usize, limit: usize, cells: usize) -> Vec<Span<'static>> {
-    let limit = limit.max(1);
-    let ratio = (used as f64 / limit as f64).clamp(0.0, 1.0);
-    let pct = (ratio * 100.0).round() as u16;
-    let filled = (ratio * cells as f64).round() as usize;
-    let filled = filled.min(cells);
-
-    // Match the info widget usage bar palette (based on remaining context).
-    let left_pct = 100u16.saturating_sub(pct);
-    let fill_color = if left_pct <= 20 {
-        rgb(255, 100, 100)
-    } else if left_pct <= 50 {
-        rgb(255, 200, 100)
-    } else {
-        rgb(100, 200, 100)
-    };
-    let track_color = rgb(50, 50, 60);
-
-    let mut spans = Vec::with_capacity(cells + 2);
-    // Slim segmented pill (▰ filled / ▱ empty) reads thinner than full blocks.
-    spans.push(Span::styled(
-        "▰".repeat(filled),
-        Style::default().fg(fill_color),
-    ));
-    spans.push(Span::styled(
-        "▱".repeat(cells.saturating_sub(filled)),
-        Style::default().fg(track_color),
-    ));
-    spans.push(Span::styled(
-        format!(" {}%", pct),
-        Style::default().fg(fill_color).bold(),
-    ));
-    spans
-}
-
-/// Context bar widths in the overscroll status line: full when there is room,
-/// compact when the directory and model need the space.
-const OVERSCROLL_CONTEXT_CELLS_FULL: usize = 10;
-const OVERSCROLL_CONTEXT_CELLS_COMPACT: usize = 4;
 pub(super) fn draw_input(
     frame: &mut Frame,
     app: &dyn TuiState,
     area: Rect,
-    next_prompt: usize,
     debug_capture: &mut Option<FrameCaptureBuilder>,
 ) -> Option<Position> {
     let input_text = app.input();
@@ -2471,8 +1943,7 @@ pub(super) fn draw_input(
     let has_suggestions = command_suggestions_active(app, &app.command_suggestions());
 
     let (prompt_char, caret_color) = input_prompt(app);
-    let num_str = format!("{}", next_prompt);
-    let prompt_len = input_prompt_len(app, next_prompt);
+    let prompt_len = input_prompt_len(app);
     let reserved_width = send_mode_reserved_width(app);
     let line_width = (area.width as usize).saturating_sub(prompt_len + reserved_width);
 
@@ -2484,7 +1955,6 @@ pub(super) fn draw_input(
         input_text,
         cursor_pos,
         line_width,
-        &num_str,
         prompt_char,
         caret_color,
         prompt_len,
@@ -2837,7 +2307,6 @@ fn char_offset_for_clicked_column(text: &str, target_col: usize, display_width: 
 pub(crate) fn input_cursor_pos_from_screen(
     app: &dyn TuiState,
     area: Rect,
-    next_prompt: usize,
     column: u16,
     row: u16,
 ) -> Option<usize> {
@@ -2847,7 +2316,7 @@ pub(crate) fn input_cursor_pos_from_screen(
 
     let input_text = app.input();
     let reserved_width = send_mode_reserved_width(app);
-    let prompt_len = input_prompt_len(app, next_prompt);
+    let prompt_len = input_prompt_len(app);
     let line_width = (area.width as usize).saturating_sub(prompt_len + reserved_width);
     if line_width == 0 {
         return Some(app.cursor_pos().min(input_text.len()));
@@ -2910,7 +2379,6 @@ pub(crate) fn wrap_input_text<'a>(
     input: &str,
     cursor_pos: usize,
     line_width: usize,
-    num_str: &str,
     prompt_char: &'a str,
     caret_color: Color,
     prompt_len: usize,
@@ -2932,19 +2400,13 @@ pub(crate) fn wrap_input_text<'a>(
             found_cursor = true;
         }
 
-        if idx == 0 {
-            let num_color = rainbow_prompt_color(0);
-            lines.push(Line::from(vec![
-                Span::styled(num_str.to_string(), Style::default().fg(num_color)),
-                Span::styled(prompt_char.to_string(), Style::default().fg(caret_color)),
-                Span::raw(segment.text.clone()),
-            ]));
+        // The rail runs down every row, like pi's editor; other prompts mark only the first.
+        let prompt = if idx == 0 || prompt_char == super::prepare::USER_RAIL {
+            Span::styled(prompt_char.to_string(), Style::default().fg(caret_color))
         } else {
-            lines.push(Line::from(vec![
-                Span::raw(" ".repeat(prompt_len)),
-                Span::raw(segment.text.clone()),
-            ]));
-        }
+            Span::raw(" ".repeat(prompt_len))
+        };
+        lines.push(Line::from(vec![prompt, Span::raw(segment.text.clone())]));
     }
 
     if !found_cursor {
@@ -3009,12 +2471,8 @@ enum QueuedMsgType {
 /// The usable text width of one composer row, i.e. the width used by
 /// `wrap_input_segments` when the composer is rendered into `area_width`.
 /// Returns `None` when there is no room for text.
-pub(crate) fn composer_line_width(
-    app: &dyn TuiState,
-    area_width: u16,
-    next_prompt: usize,
-) -> Option<usize> {
-    let prompt_len = input_prompt_len(app, next_prompt);
+pub(crate) fn composer_line_width(app: &dyn TuiState, area_width: u16) -> Option<usize> {
+    let prompt_len = input_prompt_len(app);
     let reserved = send_mode_reserved_width(app);
     let width = (area_width as usize).saturating_sub(prompt_len + reserved);
     (width > 0).then_some(width)

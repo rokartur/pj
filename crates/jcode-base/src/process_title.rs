@@ -68,6 +68,36 @@ pub fn terminal_display_title_for_id(session_id: &str) -> Option<String> {
         })
 }
 
+/// pj's tab title: `<name> | pj` once the work has a name (an explicit rename,
+/// then the agent's todo/goal title), else `<directory> | pj`.
+pub fn tab_title(name: Option<&str>, working_dir: Option<&str>) -> String {
+    let label = name
+        .and_then(normalized_display_title)
+        .map(|name| truncate_chars(&name, 48))
+        .or_else(|| {
+            let dir = std::path::Path::new(working_dir?.trim_end_matches('/'));
+            Some(dir.file_name()?.to_string_lossy().into_owned())
+        });
+    let title = match label {
+        Some(label) => format!("{label} | pj"),
+        None => "pj".to_string(),
+    };
+    crate::output_style::terminal_text(&title).into_owned()
+}
+
+pub fn tab_title_for_id(session_id: &str) -> String {
+    let session = crate::session::Session::load_startup_stub(session_id).ok();
+    let name = session
+        .as_ref()
+        .and_then(|session| session.custom_title.clone())
+        .filter(|title| !title.trim().is_empty())
+        .or_else(|| crate::todo::load_session_title(session_id));
+    let working_dir = session
+        .as_ref()
+        .and_then(|session| session.working_dir.as_deref());
+    tab_title(name.as_deref(), working_dir)
+}
+
 /// Build the deliberately minimal terminal window title. The emoji already
 /// identifies the session/connection, so do not repeat `jcode` or the memorable
 /// animal name in window chrome.
@@ -186,6 +216,17 @@ mod tests {
             ),
             "🐙 resume window title [self-dev]"
         );
+    }
+
+    #[test]
+    fn tab_title_is_the_directory_until_the_work_has_a_name() {
+        assert_eq!(tab_title(None, Some("/Users/me/Developer/pj/")), "pj | pj");
+        assert_eq!(tab_title(Some("  "), Some("/repo/api")), "api | pj");
+        assert_eq!(
+            tab_title(Some("Fix the footer"), Some("/repo/api")),
+            "Fix the footer | pj"
+        );
+        assert_eq!(tab_title(None, Some("/")), "pj");
     }
 
     #[test]

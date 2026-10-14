@@ -519,129 +519,54 @@ fn draw_notification_clips_overwide_notice_at_area_width() {
     );
 }
 
-fn overscroll_line_state() -> TestState {
+fn footer_state() -> TestState {
     let mut state = fact_test_state(String::new(), false);
     state.info_widget_data.git_info = Some(info_widget::GitInfo {
         branch: "main".to_string(),
         modified: 3,
         untracked: 2,
-        staged: 0,
         ahead: 1,
-        behind: 0,
-        dirty_files: Vec::new(),
-        dirty_total: 0,
         ..Default::default()
     });
     state
 }
 
-fn overscroll_line_row(state: &TestState, width: u16) -> String {
+#[test]
+fn footer_row_sits_at_the_bottom_like_pi() {
     let _lock = viewport_snapshot_test_lock();
     clear_flicker_frame_history_for_tests();
-    let backend = TestBackend::new(width, 18);
-    let mut terminal = Terminal::new(backend).expect("test terminal");
+    let mut terminal = Terminal::new(TestBackend::new(100, 18)).expect("test terminal");
     terminal
-        .draw(|frame| crate::tui::ui::draw(frame, state))
-        .expect("overscroll frame");
+        .draw(|frame| crate::tui::ui::draw(frame, &footer_state()))
+        .expect("footer frame");
     let rows = buffer_rows(&terminal);
-    // The overscroll line is the last row of the frame.
-    rows.last().cloned().unwrap_or_default()
-}
-
-#[test]
-fn overscroll_line_orders_dir_git_context_then_model_on_the_right() {
-    let row = overscroll_line_row(&overscroll_line_state(), 200);
-    let dir = row.find("~/jcode").expect("dir shown");
-    let branch = row.find(" main").expect("branch shown");
-    let git = row.find("~3 ?2 ↑1").expect("git status shown");
-    let context = row.find("74k/256k").expect("token counts shown when roomy");
-    let model = row.find("GPT-5.6 Sol high").expect("model shown");
+    // Short transcripts pack the composer under the content, so find the footer by its place.
+    let footer_row = rows
+        .iter()
+        .position(|row| row.starts_with("~/jcode"))
+        .unwrap_or_else(|| panic!("footer row:\n{}", rows.join("\n")));
+    let footer = &rows[footer_row];
     assert!(
-        dir < branch && branch < git && git < context && context < model,
-        "{row}"
+        rows[footer_row - 1].trim().is_empty(),
+        "blank row above the footer"
     );
     assert!(
-        row.contains("▰▰▰▱▱▱▱▱▱▱ 29%"),
-        "full 10-cell bar when roomy: {row}"
-    );
-    assert!(row.contains("OAuth") && row.contains("OpenAI"), "{row}");
-    assert!(
-        !row.contains("(overscroll"),
-        "no countdown on the pinned line: {row}"
+        footer.starts_with("~/jcode main unstaged:5 ↑1")
+            && footer
+                .trim_end()
+                .ends_with("ctx 74k (29%)  gpt-5.6 sol high"),
+        "{footer}"
     );
 }
 
-#[test]
-fn overscroll_line_compacts_before_dropping_and_always_keeps_dir_model_context() {
-    let state = overscroll_line_state();
-    let mut prev_len = usize::MAX;
-    for width in (20..=200).rev() {
-        let row = overscroll_line_row(&state, width);
-        let trimmed = row.trim().to_string();
-        if width >= 40 {
-            assert!(row.contains("jcode"), "dir kept at width {width}: {row}");
-            assert!(
-                row.contains("GPT-5.6 Sol"),
-                "model kept at width {width}: {row}"
-            );
-            assert!(row.contains("29%"), "context kept at width {width}: {row}");
-            assert!(
-                !row.contains('…'),
-                "no mid-word truncation at width {width}: {row}"
-            );
-        }
-        let len = unicode_width::UnicodeWidthStr::width(trimmed.as_str());
-        assert!(len <= width as usize, "fits at width {width}: {row}");
-        prev_len = prev_len.min(len.max(1));
-    }
-}
-
-#[test]
-fn overscroll_line_compact_steps_at_medium_width() {
-    let row = overscroll_line_row(&overscroll_line_state(), 63);
-    assert!(row.contains("~/jcode"), "{row}");
-    assert!(row.contains("GPT-5.6 Sol"), "{row}");
-    assert!(
-        !row.contains("74k/256k"),
-        "token counts dropped first: {row}"
-    );
-    assert!(!row.contains("OAuth"), "auth dropped early: {row}");
-}
-
-#[test]
-fn overscroll_model_is_pink() {
-    let _lock = viewport_snapshot_test_lock();
-    clear_flicker_frame_history_for_tests();
-    let state = overscroll_line_state();
-    let mut terminal = Terminal::new(TestBackend::new(200, 18)).expect("test terminal");
-    terminal
-        .draw(|frame| crate::tui::ui::draw(frame, &state))
-        .expect("overscroll frame");
-    let buf = terminal.backend().buffer();
-    let y = buf.area.height - 1;
-    let row: String = (0..buf.area.width)
-        .map(|x| buf[(x, y)].symbol().to_string())
-        .collect();
-    let col = row
-        .find("GPT-5.6 Sol")
-        .map(|byte| row[..byte].chars().count() as u16)
-        .expect("model on overscroll line");
-    assert_eq!(
-        buf[(col, y)].fg,
-        ratatui::style::Color::Rgb(255, 135, 200),
-        "{row}"
-    );
-}
-
-/// End to end: with widgets on and the status line pinned, the frame
-/// shows each status-line fact once (on the line) while the widgets carry
-/// only the detail behind it.
+/// End to end: with widgets on, the frame shows each footer fact once (in the
+/// footer) while the widgets carry only the detail behind it.
 #[test]
 fn widgets_render_detail_layer_without_repeating_status_line_facts() {
     let _lock = viewport_snapshot_test_lock();
     clear_flicker_frame_history_for_tests();
     crate::tui::info_widget::clear_widget_placements_for_tests();
-    let mut state = overscroll_line_state();
+    let mut state = footer_state();
     state.suppress_info_widgets = false;
     state.info_widget_data.session_name = Some("sauropod".to_string());
     state.info_widget_data.tokens_per_second = Some(62.0);
@@ -701,12 +626,11 @@ fn widgets_render_detail_layer_without_repeating_status_line_facts() {
             "{owned:?} is a status-line fact and must not repeat in widgets:\n{frame}"
         );
     }
-    let line = rows
+    let footer = rows
         .iter()
-        .rev()
-        .find(|r| r.contains("~/jcode"))
-        .expect("status line");
-    for owned in ["GPT-5.6 Sol", "74k/256k", "29%", "OAuth", "main"] {
-        assert!(line.contains(owned), "line owns {owned:?}: {line}");
+        .rfind(|row| row.starts_with("~/jcode"))
+        .expect("footer row");
+    for owned in ["gpt-5.6 sol", "74k", "29%", "main", "unstaged:5"] {
+        assert!(footer.contains(owned), "footer owns {owned:?}: {footer}");
     }
 }

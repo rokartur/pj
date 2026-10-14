@@ -48,14 +48,9 @@ pub(super) fn handle_colors_command(app: &mut App, trimmed: &str) -> bool {
     true
 }
 
+/// The palette being rendered: pj's fx defaults plus `[display.colors]`.
 fn configured_palette() -> Palette {
-    let configured = &crate::config::config().display.colors;
-    Palette::from_pairs(
-        configured
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())),
-    )
-    .0
+    jcode_tui_style::palette()
 }
 
 fn list_colors(app: &mut App) {
@@ -63,11 +58,11 @@ fn list_colors(app: &mut App) {
     let mut lines = vec!["Configurable TUI colors (`/colors <role> <#rrggbb>`):".to_string()];
     for role in ALL_ROLES.iter().copied() {
         let rgb = palette.rgb(role);
-        let marker = if palette.is_overridden(role) {
-            " (custom)"
-        } else {
-            ""
-        };
+        let custom = crate::config::config()
+            .display
+            .colors
+            .contains_key(role.key());
+        let marker = if custom { " (custom)" } else { "" };
         lines.push(format!("  {:<16} {}{}", role.key(), to_hex(rgb), marker));
     }
     lines.push(String::new());

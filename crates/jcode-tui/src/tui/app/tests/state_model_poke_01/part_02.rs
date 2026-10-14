@@ -204,7 +204,7 @@ fn test_side_panel_fullscreen_takes_full_width_and_keeps_input() {
 }
 
 #[test]
-fn test_removed_pinned_diff_config_renders_inline_without_side_pane() {
+fn test_removed_pinned_diff_config_falls_back_without_side_pane() {
     let _lock = scroll_render_test_lock();
 
     let mut app = create_test_app();
@@ -214,7 +214,7 @@ fn test_removed_pinned_diff_config_renders_inline_without_side_pane() {
     }))
     .expect("legacy display settings should remain loadable");
     app.diff_mode = legacy.diff_mode;
-    assert_eq!(app.diff_mode, crate::config::DiffDisplayMode::Inline);
+    assert_eq!(app.diff_mode, crate::config::DiffDisplayMode::default());
     app.display_messages = vec![DisplayMessage {
         role: "tool".to_string(),
         content: "wrote src/demo.rs".to_string(),
@@ -243,7 +243,7 @@ fn test_removed_pinned_diff_config_renders_inline_without_side_pane() {
             .is_none(),
         "removed pinned mode must not allocate a side pane"
     );
-    assert!(text.contains("fn demo() {}"), "inline diff must remain visible: {text}");
+    assert!(text.contains("Write src/demo.rs"), "rendered text: {text}");
     assert!(!text.contains("side Pinned"), "rendered text: {text}");
 }
 

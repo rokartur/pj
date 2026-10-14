@@ -1229,20 +1229,6 @@ pub fn debug_copy_selection_text_for_bench(range: CopySelectionRange) -> Option<
     ui::copy_selection_text(range)
 }
 
-pub(crate) fn connection_type_icon(connection_type: Option<&str>) -> Option<&'static str> {
-    let normalized = connection_type?.trim().to_ascii_lowercase();
-    if normalized.contains("websocket") || normalized == "ws" || normalized == "wss" {
-        // 🔌 is a single emoji-default codepoint. The previous 🕸️ (U+1F578 +
-        // VS16) is text-default and rendered as a monochrome outline/tofu in
-        // macOS window titles (Ghostty/Terminal ignore the VS16 selector there).
-        Some("🔌")
-    } else if normalized.contains("http") {
-        Some("🌐")
-    } else {
-        None
-    }
-}
-
 /// Cache TTL information for the current provider
 #[derive(Debug, Clone)]
 pub struct CacheTtlInfo {
@@ -2209,8 +2195,8 @@ pub fn prewarm_focused_side_panel(
 #[cfg(test)]
 mod tests {
     use super::{
-        CacheTtlInfo, KvCacheProblemKind, connection_type_icon, detect_kv_cache_problem,
-        keyboard_enhancement_flags, resolve_subscribe_metadata, scheduled_notification_text,
+        CacheTtlInfo, KvCacheProblemKind, detect_kv_cache_problem, keyboard_enhancement_flags,
+        resolve_subscribe_metadata, scheduled_notification_text,
     };
     use crate::ambient::AmbientStatus;
     use crate::tui::info_widget::AmbientWidgetData;
@@ -2412,35 +2398,6 @@ mod tests {
         let problem = detect_kv_cache_problem("gemini", None, 3, 5_000, Some(0), None, Some(&ttl))
             .expect("large Gemini prompt with explicit zero cached content should warn");
         assert_eq!(problem.kind, KvCacheProblemKind::ExpectedCacheReadMissing);
-    }
-
-    #[test]
-    fn connection_type_icon_uses_protocol_specific_icons() {
-        assert_eq!(connection_type_icon(Some("websocket")), Some("🔌"));
-        assert_eq!(connection_type_icon(Some("wss")), Some("🔌"));
-        assert_eq!(connection_type_icon(Some("https")), Some("🌐"));
-        assert_eq!(connection_type_icon(Some("https/sse")), Some("🌐"));
-        assert_eq!(connection_type_icon(Some("http")), Some("🌐"));
-        assert_eq!(connection_type_icon(Some("unknown")), None);
-        assert_eq!(connection_type_icon(None), None);
-    }
-
-    #[test]
-    fn connection_type_icons_avoid_vs16_sequences() {
-        // macOS window/tab title fonts ignore the VS16 emoji-presentation
-        // selector, so title icons must be single emoji-default codepoints.
-        for connection in ["websocket", "wss", "https", "https/sse", "http"] {
-            let icon = connection_type_icon(Some(connection)).unwrap();
-            assert_eq!(
-                icon.chars().count(),
-                1,
-                "connection icon for '{connection}' must be a single codepoint, got {icon:?}"
-            );
-            assert!(
-                !icon.contains('\u{FE0F}'),
-                "connection icon for '{connection}' must not need VS16, got {icon:?}"
-            );
-        }
     }
 
     #[test]

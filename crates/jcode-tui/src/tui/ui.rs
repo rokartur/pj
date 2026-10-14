@@ -13,8 +13,8 @@
 use super::info_widget;
 use super::markdown;
 use super::ui_diff::{
-    DiffLineKind, ParsedDiffLine, collect_diff_lines, diff_add_color, diff_change_counts_for_tool,
-    diff_del_color, generate_diff_lines_from_tool_input, tint_span_with_diff_color,
+    DiffLineKind, ParsedDiffLine, collect_diff_lines, diff_add_color, diff_del_color,
+    generate_diff_lines_from_tool_input, tint_span_with_diff_color,
 };
 use super::visual_debug::{
     self, FrameCaptureBuilder, ImageRegionCapture, InfoWidgetCapture, MarginsCapture,
@@ -51,6 +51,8 @@ mod debug_capture;
 mod diagram_pane;
 #[path = "ui_file_diff.rs"]
 mod file_diff_ui;
+#[path = "ui_footer.rs"]
+mod footer;
 #[path = "ui_frame_metrics.rs"]
 mod frame_metrics;
 #[path = "ui_header.rs"]
@@ -517,15 +519,13 @@ use layout_support::{
 };
 #[cfg(test)]
 pub(crate) use status_support::calculate_input_lines;
-use status_support::{
-    format_status_for_debug, is_running_stable_release, semver, shorten_model_name,
-};
+use status_support::{format_status_for_debug, semver};
 use theme_support::{
     accent_color, activity_indicator, activity_indicator_frame_index, ai_color, ai_text,
     asap_color, dim_color, file_link_color, header_icon_color, header_name_color,
     header_session_color, pending_color, prompt_entry_bg_color, prompt_entry_color,
-    prompt_entry_shimmer_color, queued_color, rainbow_prompt_color, system_message_color,
-    tool_color, user_bg, user_color, user_text,
+    prompt_entry_shimmer_color, queued_color, system_message_color, tool_color, user_bg,
+    user_color, user_text,
 };
 
 pub(crate) use jcode_tui_markdown::{CopyTargetKind, RawCopyTarget};
@@ -2952,14 +2952,9 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     let pending_count = input_ui::pending_prompt_count(app);
     let queued_height = pending_count.min(3) as u16;
 
-    // Count user messages to show next prompt number
-    let user_count = app.display_user_message_count();
-    let next_prompt = user_count + 1;
-
     // Calculate input height based on the same wrapping logic used for rendering
     // (max 10 lines visible, scrolls if more).
-    let base_input_height =
-        input_ui::wrapped_input_line_count(app, chat_area.width, next_prompt).min(10) as u16;
+    let base_input_height = input_ui::wrapped_input_line_count(app, chat_area.width).min(10) as u16;
     // Add 1 line for command suggestions, shell mode hints, or the Ctrl+Enter hint.
     let hint_line_height = input_ui::input_hint_line_height(app);
     let inline_block_height: u16 = inline_ui_height(app);
@@ -3026,18 +3021,19 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     let donut_height: u16 = idle_donut_reserved_height(show_donut, input_height);
     let notification_height =
         input_ui::notification_height(app, chat_area.width).min(chat_area.height.saturating_sub(4));
-    // Session status line (dir, branch, context, provider, model), always
-    // pinned directly below the input line.
-    let overscroll_height: u16 = 1;
-    let fixed_height = 1
+    // pi's footer (place, model, context, limits), pinned directly below the input.
+    let footer_height = footer::FOOTER_HEIGHT;
+    let status = input_ui::status_line(app, chat_area.width, pending_count);
+    let status_height = input_ui::status_height(&status);
+    let fixed_height = status_height
         + queued_height
         + swarm_strip_height
         + notification_height
         + inline_block_height
         + inline_ui_gap_height
         + input_height
-        + overscroll_height
-        + donut_height; // status + queued + swarm strip + notification + inline UI + gap + input + overscroll + donut
+        + footer_height
+        + donut_height; // status + queued + swarm strip + notification + inline UI + gap + input + footer + donut
     let available_height = chat_area.height;
     let stable_fixed_height = fixed_height;
     let overflows = |prepared: &PreparedChatFrame| {
@@ -3160,12 +3156,12 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
                 }), // 0 Messages (exact height; 0 when terminal-cleared)
                 Constraint::Length(queued_height), // 1 Queued messages (above status)
                 Constraint::Length(swarm_strip_height), // 2 Swarm strip (above status)
-                Constraint::Length(1),             // 3 Status line
+                Constraint::Length(status_height), // 3 Status line
                 Constraint::Length(notification_height), // 4 Notification line
                 Constraint::Length(inline_block_height), // 5 Inline UI
                 Constraint::Length(inline_ui_gap_height), // 6 Inline UI/input spacing
                 Constraint::Length(input_height),  // 7 Input
-                Constraint::Length(overscroll_height), // 8 Overscroll status line
+                Constraint::Length(footer_height), // 8 Footer
                 Constraint::Length(donut_height),  // 9 Donut animation
             ]
         } else {
@@ -3173,17 +3169,18 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
                 Constraint::Min(3),                       // 0 Messages (scrollable)
                 Constraint::Length(queued_height),        // 1 Queued messages (above status)
                 Constraint::Length(swarm_strip_height),   // 2 Swarm strip (above status)
-                Constraint::Length(1),                    // 3 Status line
+                Constraint::Length(status_height),        // 3 Status line
                 Constraint::Length(notification_height),  // 4 Notification line
                 Constraint::Length(inline_block_height),  // 5 Inline UI
                 Constraint::Length(inline_ui_gap_height), // 6 Inline UI/input spacing
                 Constraint::Length(input_height),         // 7 Input
-                Constraint::Length(overscroll_height),    // 8 Overscroll status line
+                Constraint::Length(footer_height),        // 8 Footer
                 Constraint::Length(donut_height),         // 9 Donut animation
             ]
         })
         .split(chat_area);
-    record_status_area(chunks[3]);
+    let status_area = input_ui::status_text_area(chunks[3]);
+    record_status_area(status_area);
 
     // Draw the inline swarm strip directly above the status line if present.
     if swarm_strip_height > 0 {
@@ -3199,7 +3196,7 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         if queued_height > 0 {
             capture.layout.queued_area = Some(chunks[1].into());
         }
-        capture.layout.status_area = Some(chunks[3].into());
+        capture.layout.status_area = Some(status_area.into());
         capture.layout.input_area = Some(chunks[7].into());
         capture.layout.input_lines_raw = app.input().lines().count().max(1);
         capture.layout.input_lines_wrapped = base_input_height as usize;
@@ -3402,12 +3399,12 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         if let Some(ref mut capture) = debug_capture {
             capture.render_order.push("draw_queued".to_string());
         }
-        input_ui::draw_queued(frame, app, chunks[1], user_count + 1);
+        input_ui::draw_queued(frame, app, chunks[1]);
     }
     if let Some(ref mut capture) = debug_capture {
         capture.render_order.push("draw_status".to_string());
     }
-    input_ui::draw_status(frame, app, chunks[3], pending_count);
+    input_ui::draw_status(frame, app, status_area, status);
     if notification_height > 0 {
         input_ui::draw_notification(frame, app, chunks[4]);
     }
@@ -3419,17 +3416,9 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         draw_inline_ui(frame, app, chunks[5]);
     }
 
-    let _input_cursor = input_ui::draw_input(
-        frame,
-        app,
-        chunks[7],
-        user_count + pending_count + 1,
-        &mut debug_capture,
-    );
+    let _input_cursor = input_ui::draw_input(frame, app, chunks[7], &mut debug_capture);
 
-    if overscroll_height > 0 {
-        input_ui::draw_overscroll_status(frame, app, chunks[8]);
-    }
+    footer::draw_footer(frame, app, chunks[8]);
 
     if donut_height > 0 {
         animations::draw_idle_animation(frame, app, chunks[9]);

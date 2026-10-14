@@ -92,17 +92,24 @@ pub fn init_theme_mode_for_resume(inherited_theme: Option<&str>) -> ThemeMode {
     mode
 }
 
-/// Install the user's configured color palette from `[display.colors]`.
+/// Install the color palette: pj's fx defaults on a dark terminal, then the
+/// user's `[display.colors]` on top.
 ///
 /// Invalid entries are logged and skipped rather than failing the palette, so
 /// one typo can never leave the TUI unstyled. Safe to call repeatedly; the TUI
 /// calls it again after `/colors` edits so changes apply without a restart.
 pub fn init_palette() {
+    let fx = (jcode_tui_style::theme_mode() == ThemeMode::Dark)
+        .then_some(pj_ext::look::FX_COLORS)
+        .into_iter()
+        .flatten();
     let configured = &crate::config::config().display.colors;
     let (palette, errors) = jcode_tui_style::Palette::from_pairs(
-        configured
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str())),
+        fx.chain(
+            configured
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str())),
+        ),
     );
     for error in errors {
         crate::logging::warn(&format!("display.colors: {error}"));

@@ -683,7 +683,9 @@ fn test_configured_palette_recolors_a_real_rendered_frame() {
         terminal.backend().buffer().clone()
     }
 
-    // The palette is process-global, so always restore it, even on failure.
+    // The palette is process-global: hold the lock `/colors` tests take while they
+    // reinstall it, and always restore it, even on failure.
+    let _palette_lock = crate::storage::lock_test_env();
     struct Restore;
     impl Drop for Restore {
         fn drop(&mut self) {

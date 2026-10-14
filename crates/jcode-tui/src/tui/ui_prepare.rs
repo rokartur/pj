@@ -171,17 +171,7 @@ fn map_display_lines_to_logical_lines(
     Some(maps)
 }
 
-fn user_prompt_number_style(color: Color) -> Style {
-    Style::default().fg(color).bg(user_bg())
-}
-
-fn user_prompt_accent_style() -> Style {
-    Style::default().fg(user_color()).bg(user_bg())
-}
-
-fn user_prompt_text_style() -> Style {
-    Style::default().fg(user_text()).bg(user_bg())
-}
+pub(crate) const USER_RAIL: &str = "┃ ";
 
 fn default_message_alignment(role: &str, centered: bool) -> ratatui::layout::Alignment {
     if centered
@@ -361,13 +351,11 @@ fn push_user_prompt_lines(
     line_raw_overrides: &mut Vec<Option<WrappedLineMap>>,
     line_copy_offsets: &mut Vec<usize>,
     user_line_indices: &mut Vec<usize>,
-    prompt_num: usize,
-    num_color: Color,
     content: &str,
     align: ratatui::layout::Alignment,
 ) {
-    let prefix_width = unicode_width::UnicodeWidthStr::width(prompt_num.to_string().as_str())
-        + unicode_width::UnicodeWidthStr::width("› ");
+    // pi's minimal user messages: a white rail on every line, bold text, no background.
+    let prefix_width = unicode_width::UnicodeWidthStr::width(USER_RAIL);
     // Voice prompts carry <transcription> tags for the model. Show the spoken
     // words with a mic marker instead, like Jcode Desktop.
     let (visible, transcribed) = jcode_session_types::strip_transcription(content);
@@ -382,29 +370,15 @@ fn push_user_prompt_lines(
         raw_plain_lines.push(content_line.to_string());
         let prompt_width = unicode_width::UnicodeWidthStr::width(content_line);
         let rendered_line_idx = lines.len();
-        let is_first_line = line_idx == 0;
-        if is_first_line {
+        if line_idx == 0 {
             user_line_indices.push(rendered_line_idx);
         }
 
-        let prefix_spans = if is_first_line {
-            vec![
-                Span::styled(
-                    format!("{}", prompt_num),
-                    user_prompt_number_style(num_color),
-                ),
-                Span::styled("› ", user_prompt_accent_style()),
-            ]
-        } else {
-            vec![Span::styled(
-                " ".repeat(prefix_width),
-                user_prompt_accent_style(),
-            )]
-        };
+        let prefix_spans = vec![Span::styled(USER_RAIL, Style::default().fg(user_color()))];
         let mut spans = prefix_spans;
         spans.push(Span::styled(
             content_line.to_string(),
-            user_prompt_text_style(),
+            Style::default().fg(user_text()).bold(),
         ));
         lines.push(Line::from(spans).alignment(align));
         line_raw_overrides.push(Some(WrappedLineMap {
@@ -1306,11 +1280,6 @@ struct BodyRenderCtx<'a> {
     app: &'a dyn TuiState,
     width: u16,
     centered: bool,
-    /// Number rendered next to the first user prompt = global prompt count +
-    /// number of prompts hidden by compaction.
-    prompt_number_offset: usize,
-    total_prompts: usize,
-    pending_count: usize,
     anchored_images: Arc<super::inline_image_ui::AnchoredInlineImages>,
     inline_images_visible: bool,
     messages: &'a [DisplayMessage],
@@ -1427,17 +1396,12 @@ fn render_message_into(
         "user" => {
             acc.prompt_num += 1;
             acc.user_prompt_texts.push(msg.content.clone());
-            let distance = ctx.total_prompts + ctx.pending_count + 1 - acc.prompt_num;
-            let num_color = rainbow_prompt_color(distance);
-            let displayed_prompt_num = acc.prompt_num + ctx.prompt_number_offset;
             push_user_prompt_lines(
                 &mut acc.lines,
                 &mut acc.raw_plain_lines,
                 &mut acc.line_raw_overrides,
                 &mut acc.line_copy_offsets,
                 &mut acc.user_line_indices,
-                displayed_prompt_num,
-                num_color,
                 &msg.content,
                 align,
             );
@@ -1820,9 +1784,6 @@ pub(super) fn prepare_body_incremental(
         app,
         width,
         centered,
-        prompt_number_offset: app.compacted_hidden_user_prompts(),
-        total_prompts: app.display_user_message_count(),
-        pending_count: input_ui::pending_prompt_count(app),
         anchored_images,
         inline_images_visible: app.inline_images_visible(),
         messages,
@@ -2146,9 +2107,6 @@ pub(super) fn prepare_body_prepended(
         app,
         width,
         centered,
-        prompt_number_offset: app.compacted_hidden_user_prompts(),
-        total_prompts: app.display_user_message_count(),
-        pending_count: input_ui::pending_prompt_count(app),
         anchored_images: super::inline_image_ui::resolve_anchored_items_cached(app),
         inline_images_visible: app.inline_images_visible(),
         messages,
@@ -2394,9 +2352,6 @@ pub(super) fn prepare_body(
         app,
         width,
         centered,
-        prompt_number_offset: app.compacted_hidden_user_prompts(),
-        total_prompts: app.display_user_message_count(),
-        pending_count: input_ui::pending_prompt_count(app),
         // Images anchored to transcript messages render inline right after the
         // message that produced them (tool result or user prompt).
         anchored_images: super::inline_image_ui::resolve_anchored_items_cached(app),

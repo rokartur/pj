@@ -213,7 +213,7 @@ fn model_suggestions_full_frame_keeps_composer_position() {
     let input_row = |lines: &[String]| {
         lines
             .iter()
-            .position(|line| line.contains("> /model"))
+            .position(|line| line.contains("┃ /model"))
             .unwrap()
     };
     assert_eq!(input_row(&with_picker), input_row(&without_picker));

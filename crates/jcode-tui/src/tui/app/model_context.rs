@@ -993,6 +993,7 @@ impl App {
             }
             None => self.provider.context_window(),
         };
+        let limit = capped_context_limit(limit);
         self.context_limit = limit as u64;
         self.context_warning_shown = false;
 
@@ -1013,6 +1014,7 @@ impl App {
     /// compaction trigger that fires about five times too early on a 1M route.
     /// Every direct assignment should come through here.
     pub(super) fn set_context_limit_and_sync_budget(&mut self, limit: usize) {
+        let limit = capped_context_limit(limit);
         self.context_limit = limit as u64;
         self.context_warning_shown = false;
         let compaction = self.registry.compaction();
@@ -1807,6 +1809,14 @@ impl App {
     }
 }
 
+/// Apply `[compaction] max_context_tokens` (set by `/context 200k|500k|1m`) to
+/// the model's window so the meter matches the compaction budget.
+fn capped_context_limit(model_window: usize) -> usize {
+    match crate::config::config().compaction.max_context_tokens {
+        0 => model_window,
+        cap => model_window.min(cap),
+    }
+}
 pub(super) fn handle_model_command(app: &mut App, trimmed: &str) -> bool {
     if is_refresh_model_list_command(trimmed) {
         let session_id = app

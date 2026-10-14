@@ -908,7 +908,7 @@ fn test_prepare_messages_tool_row_refreshes_after_message_version_bump() {
     };
     let final_message = DisplayMessage {
         role: "tool".to_string(),
-        content: "x".repeat(7_600),
+        content: "Error: file not found".to_string(),
         tool_calls: vec![],
         duration_secs: None,
         title: None,
@@ -938,20 +938,16 @@ fn test_prepare_messages_tool_row_refreshes_after_message_version_bump() {
         .collect();
 
     assert!(
-        first_rendered.iter().any(|line| line.contains("1 tok")),
-        "expected initial render to reflect placeholder tool output: {first_rendered:?}"
+        first_rendered
+            .iter()
+            .any(|line| line.starts_with("✓ Read src/main.rs")),
+        "expected initial render to show the successful placeholder: {first_rendered:?}"
     );
     assert!(
         refreshed_rendered
             .iter()
-            .any(|line| line.contains("1.9k tok")),
-        "expected refreshed render to include final tool token badge: {refreshed_rendered:?}"
-    );
-    assert!(
-        refreshed_rendered
-            .iter()
-            .any(|line| line.contains("✓ read src/main.rs · 1.9k tok")),
-        "expected refreshed tool row summary in final render: {refreshed_rendered:?}"
+            .any(|line| line.starts_with("× Read")),
+        "expected refreshed render to show the final error: {refreshed_rendered:?}"
     );
 }
 
@@ -1081,7 +1077,7 @@ fn test_render_tool_message_batch_nested_subcall_params_still_render() {
 
     assert_eq!(rendered.len(), 2, "rendered={rendered:?}");
     assert!(
-        rendered[0].contains("✓ batch 1 call"),
+        rendered[0].contains("✓ Batch 1 call"),
         "rendered={rendered:?}"
     );
     assert!(
@@ -1118,7 +1114,7 @@ fn test_render_tool_message_batch_flat_grep_subcall_uses_pattern_and_path() {
 
     assert_eq!(rendered.len(), 2, "rendered={rendered:?}");
     assert!(
-        rendered[0].contains("✓ batch 1 call"),
+        rendered[0].contains("✓ Batch 1 call"),
         "rendered={rendered:?}"
     );
     assert!(
@@ -1335,7 +1331,7 @@ fn test_prepare_messages_restored_history_matches_live_tool_rows() {
     assert!(
         restored
             .iter()
-            .any(|line| line.contains("bash · Check repo state")),
+            .any(|line| line.contains("Bash · Check repo state")),
         "restored={restored:#?}"
     );
     assert_eq!(live, restored);

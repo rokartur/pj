@@ -1617,13 +1617,7 @@ impl App {
         let clicked_input_cursor = if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
         {
             input_area.and_then(|area| {
-                input_ui::input_cursor_pos_from_screen(
-                    self,
-                    area,
-                    input_ui::next_input_prompt_number(self),
-                    mouse.column,
-                    mouse.row,
-                )
+                input_ui::input_cursor_pos_from_screen(self, area, mouse.column, mouse.row)
             })
         } else {
             None

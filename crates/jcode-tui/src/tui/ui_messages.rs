@@ -3784,7 +3784,7 @@ pub(crate) fn render_tool_message(
     }
 
     let centered = markdown::center_code_blocks();
-    let token_badge = tool_output_token_badge(&msg.content);
+    let token_label = tool_output_token_label(&msg.content);
 
     // A restored or remotely mirrored transcript can occasionally retain the
     // todo result while losing its paired ToolCall metadata. Recognize the
@@ -3845,7 +3845,7 @@ pub(crate) fn render_tool_message(
             .and_then(|v| v.as_str())
             .or_else(|| tc.input.get("tag").and_then(|v| v.as_str()))
             .unwrap_or("fact");
-        let title = format!("🧠 saved ({}) · {}", category, token_badge.label.as_str());
+        let title = format!("🧠 saved ({}) · {}", category, token_label);
         let border_style = Style::default().fg(rgb(255, 200, 100));
         let text_style = Style::default().fg(dim_color());
         let max_box = (width.saturating_sub(4) as usize).min(72);
@@ -3900,7 +3900,7 @@ pub(crate) fn render_tool_message(
                 "🧠 recalled {} memor{} · {}",
                 count,
                 if count == 1 { "y" } else { "ies" },
-                token_badge.label.as_str()
+                token_label
             );
             let header = Line::from(Span::styled(header_text, border_style));
             let total_width = (width.saturating_sub(4) as usize).min(120);
@@ -3931,20 +3931,14 @@ pub(crate) fn render_tool_message(
         .unwrap_or(false);
 
     let (icon, icon_color) = if is_partial_batch {
-        ("⚠", rgb(214, 184, 92))
+        ("⚠", rgb(215, 175, 95))
     } else if is_error {
-        ("✗", rgb(220, 100, 100))
+        ("×", rgb(255, 123, 114))
     } else {
-        ("✓", rgb(100, 180, 100))
+        ("✓", rgb(126, 231, 135))
     };
 
     let is_edit_tool = tools_ui::is_edit_tool_name(&tc.name);
-    let (additions, deletions) = if is_edit_tool {
-        diff_change_counts_for_tool(tc, &msg.content)
-    } else {
-        (0, 0)
-    };
-    let has_diff_changes = additions > 0 || deletions > 0;
 
     let block_width = if centered {
         super::centered_content_block_width(width, 96)
@@ -3952,19 +3946,10 @@ pub(crate) fn render_tool_message(
         width as usize
     };
     let row_width = block_width.saturating_sub(1);
-    let display_name = tools_ui::resolve_display_tool_name(&tc.name).to_string();
-    let base_prefix = format!("  {} {} ", icon, display_name);
-    let token_suffix_width =
-        UnicodeWidthStr::width(format!(" · {}", token_badge.label.as_str()).as_str());
-    let edit_suffix_width = if is_edit_tool && has_diff_changes {
-        UnicodeWidthStr::width(format!(" (+{} -{})", additions, deletions).as_str())
-    } else {
-        0
-    };
-    let reserved_summary_width = row_width
-        .saturating_sub(UnicodeWidthStr::width(base_prefix.as_str()))
-        .saturating_sub(token_suffix_width)
-        .saturating_sub(edit_suffix_width);
+    let display_name = super::capitalize(tools_ui::resolve_display_tool_name(&tc.name));
+    let base_prefix = format!("{} {} ", icon, display_name);
+    let reserved_summary_width =
+        row_width.saturating_sub(UnicodeWidthStr::width(base_prefix.as_str()));
 
     let intent = tc
         .intent
@@ -4007,9 +3992,8 @@ pub(crate) fn render_tool_message(
     } else {
         tools_ui::get_tool_summary_with_budget(tc, 50, Some(technical_summary_width))
     };
-    // Edit rows read like every other tool row: the intent. The file path is
-    // already shown on the inline diff header right below, so repeating it on
-    // the row is noise. Errors keep their summary so failures stay diagnosable.
+
+    // The inline diff header right below already names the file; errors keep their summary.
     let edit_path_on_diff_header = is_edit_tool
         && !is_error
         && diff_mode.is_inline()
@@ -4021,7 +4005,7 @@ pub(crate) fn render_tool_message(
     };
 
     let mut tool_line = vec![
-        Span::styled(format!("  {} ", icon), Style::default().fg(icon_color)),
+        Span::styled(format!("{} ", icon), Style::default().fg(icon_color)),
         Span::styled(display_name, Style::default().fg(tool_color())),
     ];
     if let Some(intent) = intent {
@@ -4038,34 +4022,12 @@ pub(crate) fn render_tool_message(
             tool_line.push(Span::styled(summary, Style::default().fg(dim_color())));
         }
     } else if !summary.is_empty() {
-        tool_line.push(Span::styled(
-            format!(" {}", summary),
-            Style::default().fg(dim_color()),
-        ));
+        tool_line.push(Span::raw(" "));
+        tool_line.extend(summary_spans(&summary));
     }
-    if is_edit_tool && has_diff_changes {
-        tool_line.push(Span::styled(" (", Style::default().fg(dim_color())));
-        tool_line.push(Span::styled(
-            format!("+{}", additions),
-            Style::default().fg(diff_add_color()),
-        ));
-        tool_line.push(Span::styled(" ", Style::default().fg(dim_color())));
-        tool_line.push(Span::styled(
-            format!("-{}", deletions),
-            Style::default().fg(diff_del_color()),
-        ));
-        tool_line.push(Span::styled(")", Style::default().fg(dim_color())));
-    }
-    let token_suffix = Line::from(vec![
-        Span::styled(" · ", Style::default().fg(dim_color())),
-        Span::styled(token_badge.label, Style::default().fg(token_badge.color)),
-    ]);
 
-    let rendered_tool_line = super::truncate_line_preserving_suffix_to_width(
-        &Line::from(tool_line),
-        &token_suffix,
-        row_width,
-    );
+    let rendered_tool_line =
+        super::truncate_line_with_ellipsis_to_width(&Line::from(tool_line), row_width);
     let rendered_tool_line_text = super::line_plain_text(&rendered_tool_line);
     lines.push(rendered_tool_line);
     if let Some(draft_lines) = render_gmail_draft_card(tc, &msg.content, is_error, row_width) {
@@ -4287,23 +4249,23 @@ pub(crate) fn render_tool_message(
                 (result, true, half)
             };
 
-        let pad_str = "";
+        const INDENT: &str = "  ";
 
         let diff_file_path =
             |line: &ParsedDiffLine| line.file_path.clone().or_else(|| file_path_for_ext.clone());
-        let first_file_path = display_lines.first().and_then(|line| diff_file_path(line));
-        let diff_header = |prefix: &str, file_path: Option<&str>| match file_path {
-            Some(path) => format!("{pad_str}{prefix} diff · {path}"),
-            None => format!("{pad_str}{prefix} diff"),
+        let file_header = |file_path: Option<&str>| {
+            let mut spans = vec![Span::raw(INDENT)];
+            spans.extend(summary_spans(file_path.unwrap_or("diff")));
+            Line::from(spans).alignment(ratatui::layout::Alignment::Left)
         };
+        let line_number_width = display_lines
+            .iter()
+            .map(|line| diff_line_number(&line.prefix).len())
+            .max()
+            .unwrap_or(0);
 
-        lines.push(
-            Line::from(Span::styled(
-                diff_header("┌─", first_file_path.as_deref()),
-                Style::default().fg(dim_color()),
-            ))
-            .alignment(ratatui::layout::Alignment::Left),
-        );
+        let first_file_path = display_lines.first().and_then(|line| diff_file_path(line));
+        lines.push(file_header(first_file_path.as_deref()));
 
         let mut shown_truncation = false;
         let mut previous_file_path = first_file_path;
@@ -4313,7 +4275,7 @@ pub(crate) fn render_tool_message(
                 let skipped = total_changes - MAX_DIFF_LINES;
                 lines.push(
                     Line::from(Span::styled(
-                        format!("{}│ ... {} more changes ...", pad_str, skipped),
+                        format!("{INDENT}… {skipped} more changes (+{additions} -{deletions})"),
                         Style::default().fg(dim_color()),
                     ))
                     .alignment(ratatui::layout::Alignment::Left),
@@ -4323,30 +4285,28 @@ pub(crate) fn render_tool_message(
 
             let current_file_path = diff_file_path(line);
             if i > 0 && current_file_path != previous_file_path {
-                lines.push(
-                    Line::from(Span::styled(
-                        diff_header("├─", current_file_path.as_deref()),
-                        Style::default().fg(dim_color()),
-                    ))
-                    .alignment(ratatui::layout::Alignment::Left),
-                );
+                lines.push(file_header(current_file_path.as_deref()));
             }
             previous_file_path = current_file_path.clone();
 
-            let base_color = if line.kind == DiffLineKind::Add {
-                diff_add_color()
+            let (base_color, sign) = if line.kind == DiffLineKind::Add {
+                (diff_add_color(), "+ ")
             } else {
-                diff_del_color()
+                (diff_del_color(), "- ")
             };
 
-            let border_prefix = format!("{}│ ", pad_str);
-            let prefix_visual_width = unicode_width::UnicodeWidthStr::width(border_prefix.as_str())
-                + unicode_width::UnicodeWidthStr::width(line.prefix.as_str());
+            let gutter = if line_number_width == 0 {
+                INDENT.to_string()
+            } else {
+                let number = diff_line_number(&line.prefix);
+                format!("{INDENT}{number:>line_number_width$} ")
+            };
+            let prefix_visual_width = unicode_width::UnicodeWidthStr::width(gutter.as_str()) + 2;
             let max_content_width = (width as usize).saturating_sub(prefix_visual_width + 1);
 
             let mut spans: Vec<Span<'static>> = vec![
-                Span::styled(border_prefix, Style::default().fg(dim_color())),
-                Span::styled(line.prefix.clone(), Style::default().fg(base_color)),
+                Span::styled(gutter, Style::default().fg(dim_color())),
+                Span::styled(sign, Style::default().fg(base_color)),
             ];
 
             if !line.content.is_empty() {
@@ -4384,16 +4344,6 @@ pub(crate) fn render_tool_message(
 
             lines.push(Line::from(spans).alignment(ratatui::layout::Alignment::Left));
         }
-
-        let footer = if total_changes > 0 && truncated {
-            format!("{}└─ (+{} -{} total)", pad_str, additions, deletions)
-        } else {
-            format!("{}└─", pad_str)
-        };
-        lines.push(
-            Line::from(Span::styled(footer, Style::default().fg(dim_color())))
-                .alignment(ratatui::layout::Alignment::Left),
-        );
     }
 
     if centered {
@@ -4403,21 +4353,24 @@ pub(crate) fn render_tool_message(
     lines
 }
 
-struct ToolOutputTokenBadge {
-    label: String,
-    color: Color,
+/// `"3008- "` -> `"3008"`; a bare `"+"`/`"-"` from a unified diff has no number.
+fn diff_line_number(prefix: &str) -> &str {
+    prefix.trim_end().trim_end_matches(['+', '-'])
+}
+fn tool_output_token_label(content: &str) -> String {
+    crate::util::format_approx_token_count(crate::util::estimate_tokens(content))
 }
 
-fn tool_output_token_badge(content: &str) -> ToolOutputTokenBadge {
-    let tokens = crate::util::estimate_tokens(content);
-    let color = match crate::util::approx_tool_output_token_severity(tokens) {
-        crate::util::ApproxTokenSeverity::Normal => rgb(118, 118, 118),
-        crate::util::ApproxTokenSeverity::Warning => rgb(214, 184, 92),
-        crate::util::ApproxTokenSeverity::Danger => rgb(224, 118, 118),
-    };
-    ToolOutputTokenBadge {
-        label: crate::util::format_approx_token_count(tokens),
-        color,
+/// A lone path reads like pi's: directory muted, file name white. Anything else is muted.
+fn summary_spans(summary: &str) -> Vec<Span<'static>> {
+    let muted = Style::default().fg(dim_color());
+    let is_path = summary.contains('/') && !summary.contains(char::is_whitespace);
+    match summary.rsplit_once('/') {
+        Some((dir, name)) if is_path && !name.is_empty() => vec![
+            Span::styled(format!("{dir}/"), muted),
+            Span::styled(name.to_string(), Style::default().fg(tool_color())),
+        ],
+        _ => vec![Span::styled(summary.to_string(), muted)],
     }
 }
 

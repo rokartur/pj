@@ -1978,7 +1978,7 @@ fn render_tool_message_prefers_subagent_title_with_model() {
         .map(|span| span.content.as_ref())
         .collect();
 
-    assert!(rendered.contains("subagent Verify subagent model (general · gpt-5.4)"));
+    assert!(rendered.contains("Subagent Verify subagent model (general · gpt-5.4)"));
 }
 
 #[test]
@@ -2005,7 +2005,7 @@ fn render_tool_message_shows_intent_and_technical_preview_on_one_line() {
     let lines = render_tool_message(&msg, 120, crate::config::DiffDisplayMode::Off);
     let rendered = extract_line_text(&lines[0]);
 
-    assert!(rendered.contains("bash · Verify compact progress card · $ cargo test"));
+    assert!(rendered.contains("Bash · Verify compact progress card · $ cargo test"));
     assert_eq!(lines.len(), 1, "Bash output is hidden by default");
     crate::tui::ui::tools_ui::tests_tool_call_details_override::set(false);
 }
@@ -2037,7 +2037,7 @@ fn render_tool_message_hides_technical_preview_by_default() {
     let rendered = extract_line_text(&lines[0]);
 
     assert!(
-        rendered.contains("bash · Verify compact progress card"),
+        rendered.contains("Bash · Verify compact progress card"),
         "rendered={rendered}"
     );
     assert!(
@@ -2079,34 +2079,7 @@ fn render_tool_message_keeps_error_summary_when_details_hidden() {
 }
 
 #[test]
-fn render_tool_message_shows_token_badge() {
-    let msg = DisplayMessage {
-        role: "tool".to_string(),
-        content: "x".repeat(7_600),
-        tool_calls: Vec::new(),
-        duration_secs: None,
-        title: None,
-        tool_data: Some(crate::message::ToolCall {
-            id: "call_2".to_string(),
-            name: "read".to_string(),
-            input: serde_json::json!({"file_path": "src/main.rs"}),
-            intent: None,
-            thought_signature: None,
-        }),
-    };
-
-    let lines = render_tool_message(&msg, 120, crate::config::DiffDisplayMode::Off);
-    let badge_span = lines[0]
-        .spans
-        .iter()
-        .find(|span| span.content.contains("1.9k tok"))
-        .expect("missing token badge");
-
-    assert_eq!(badge_span.style.fg, Some(rgb(118, 118, 118)));
-}
-
-#[test]
-fn render_tool_message_hides_bash_output() {
+fn render_tool_message_keeps_the_tool_result_off_the_row() {
     let msg = DisplayMessage {
         role: "tool".to_string(),
         content: "<class 'zip'>\n[('p', 'b'), ('a', 'a'), ('l', 'l'), ('e', 'e')]".to_string(),
@@ -2127,8 +2100,8 @@ fn render_tool_message_hides_bash_output() {
     let lines = render_tool_message(&msg, 120, crate::config::DiffDisplayMode::Off);
     let rendered = lines.iter().map(extract_line_text).collect::<Vec<_>>();
 
-    assert!(!rendered.iter().any(|line| line.contains("<class 'zip'>")));
-    assert!(!rendered.iter().any(|line| line.contains("[('p', 'b')")));
+    assert_eq!(rendered.len(), 1, "{rendered:?}");
+    assert!(!rendered[0].contains("<class 'zip'>"), "{rendered:?}");
 }
 
 #[test]
@@ -2673,33 +2646,6 @@ fn discovery_cards_wrap_within_narrow_transcript_width() {
 }
 
 #[test]
-fn render_tool_message_colors_high_token_badge() {
-    let msg = DisplayMessage {
-        role: "tool".to_string(),
-        content: "x".repeat(48_000),
-        tool_calls: Vec::new(),
-        duration_secs: None,
-        title: None,
-        tool_data: Some(crate::message::ToolCall {
-            id: "call_3".to_string(),
-            name: "read".to_string(),
-            input: serde_json::json!({"file_path": "src/main.rs"}),
-            intent: None,
-            thought_signature: None,
-        }),
-    };
-
-    let lines = render_tool_message(&msg, 120, crate::config::DiffDisplayMode::Off);
-    let badge_span = lines[0]
-        .spans
-        .iter()
-        .find(|span| span.content.contains("12k tok"))
-        .expect("missing token badge");
-
-    assert_eq!(badge_span.style.fg, Some(rgb(224, 118, 118)));
-}
-
-#[test]
 fn render_tool_message_shows_inline_diff_for_pascal_case_multiedit() {
     let msg = DisplayMessage {
         role: "tool".to_string(),
@@ -2727,7 +2673,10 @@ fn render_tool_message_shows_inline_diff_for_pascal_case_multiedit() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    assert!(plain.contains("┌─ diff"), "plain={plain}");
+    assert!(
+        plain.contains("\n    demo.txt\n    1 - old line"),
+        "plain={plain}"
+    );
     assert!(plain.contains("old line"), "plain={plain}");
     assert!(plain.contains("new line"), "plain={plain}");
 }
@@ -2759,7 +2708,10 @@ fn render_tool_message_labels_single_file_apply_patch_diff() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    assert!(plain.contains("┌─ diff · src/example.rs"), "plain={plain}");
+    assert!(
+        plain.contains("\n    src/example.rs\n    - old_value"),
+        "plain={plain}"
+    );
     assert!(plain.contains("old_value"), "plain={plain}");
     assert!(plain.contains("new_value"), "plain={plain}");
 }
@@ -2791,12 +2743,10 @@ fn render_tool_message_preserves_multi_file_apply_patch_boundaries() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    let a_header = plain.find("┌─ diff · a.txt").expect("missing a.txt header");
+    let a_header = plain.find("a.txt\n").expect("missing a.txt header");
     let old_a = plain.find("old a").expect("missing a.txt deletion");
     let new_a = plain.find("new a").expect("missing a.txt addition");
-    let b_header = plain
-        .find("├─ diff · b.txt")
-        .expect("missing b.txt boundary");
+    let b_header = plain.find("b.txt\n").expect("missing b.txt boundary");
     let old_b = plain.find("old b").expect("missing b.txt deletion");
     let new_b = plain.find("new b").expect("missing b.txt addition");
     assert!(
@@ -2832,11 +2782,9 @@ fn render_tool_message_shows_numbered_write_result_diff_after_input_compaction()
         .join("\n");
 
     assert!(
-        lines[0].spans.iter().any(|span| span.content == "+2"),
+        plain.contains("\n    /tmp/head-to-head.html\n    1 + <!doctype html>"),
         "plain={plain}"
     );
-    assert!(plain.contains("┌─ diff"), "plain={plain}");
-    assert!(plain.contains("<!doctype html>"), "plain={plain}");
     assert!(plain.contains("<html lang=\"en\">"), "plain={plain}");
 }
 
@@ -2874,7 +2822,7 @@ fn render_tool_message_never_draws_an_empty_edit_diff_frame() {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(!plain.contains("┌─ diff"), "tool={name}, plain={plain}");
+        assert!(!plain.contains("demo.txt\n"), "tool={name}, plain={plain}");
         assert!(!plain.contains("(+0 -0)"), "tool={name}, plain={plain}");
     }
 }
@@ -2906,10 +2854,10 @@ fn render_tool_message_marks_failed_apply_patch_without_empty_diff() {
         .join("\n");
 
     assert!(
-        plain.trim_start().starts_with("✗ apply_patch"),
+        plain.trim_start().starts_with("× Apply_patch"),
         "plain={plain}"
     );
-    assert!(!plain.contains("┌─ diff"), "plain={plain}");
+    assert!(!plain.contains("/tmp/main.rs\n"), "plain={plain}");
     assert!(!plain.contains("(+0 -0)"), "plain={plain}");
 }
 
@@ -2947,14 +2895,14 @@ fn render_tool_message_inline_mode_truncates_large_diffs() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    assert!(plain.contains("... 2 more changes ..."), "plain={plain}");
+    assert!(plain.contains("… 2 more changes (+7 -7)"), "plain={plain}");
     assert!(plain.contains("old line 3"), "plain={plain}");
     assert!(!plain.contains("old line 7"), "plain={plain}");
     assert!(
         !plain.contains("new line 1 suffix_1_abcdefghijklmnopqrstuvwxyz0123456789"),
         "plain={plain}"
     );
-    assert!(plain.contains("suffix_2_abcdefghijklm…"), "plain={plain}");
+    assert!(plain.contains("suffix_2_abcdefghijkl…"), "plain={plain}");
 }
 
 #[test]
@@ -3132,7 +3080,7 @@ fn render_tool_message_shows_swarm_spawn_prompt_summary() {
         .map(|span| span.content.as_ref())
         .collect();
 
-    assert!(rendered.contains("swarm spawn"), "rendered={rendered}");
+    assert!(rendered.contains("Swarm spawn"), "rendered={rendered}");
     assert!(
         rendered.contains("Extract the restart command cluster"),
         "rendered={rendered}"
@@ -3364,11 +3312,11 @@ fn render_tool_message_edit_row_does_not_duplicate_diff_header_path() {
             .count();
         assert_eq!(occurrences, 1, "path should appear once: {text:#?}");
         assert!(
-            text[1].contains("diff · /repo/src/very_specific_name.rs"),
+            text[1].trim() == "/repo/src/very_specific_name.rs",
             "{text:#?}"
         );
         if let Some(intent) = intent {
-            assert!(text[0].contains(&format!("edit · {intent}")), "{text:#?}");
+            assert!(text[0].contains(&format!("Edit · {intent}")), "{text:#?}");
         }
 
         // With diffs hidden the row is the only place the path can appear.

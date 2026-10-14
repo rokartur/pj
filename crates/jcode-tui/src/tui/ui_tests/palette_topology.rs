@@ -48,6 +48,17 @@ fn measure() -> (RoleAreas, RoleAdjacency) {
                 ),
                 message("system", "system notice"),
                 DisplayMessage::error("something failed"),
+                DisplayMessage {
+                    content: "1│fn main() {}".to_string(),
+                    tool_data: Some(crate::message::ToolCall {
+                        id: "call_read".to_string(),
+                        name: "read".to_string(),
+                        input: serde_json::json!({"file_path": "src/main.rs"}),
+                        intent: None,
+                        thought_signature: None,
+                    }),
+                    ..message("tool", "")
+                },
             ],
             input: "next question".to_string(),
             // Measure intentional adjacent prompt colors rather than relying

@@ -222,6 +222,13 @@ impl Config {
         Ok(())
     }
 
+    /// Persist `[compaction] max_context_tokens`; 0 removes the cap.
+    pub fn set_compaction_max_context_tokens(tokens: usize) -> anyhow::Result<()> {
+        let mut cfg = Self::load_for_update()?;
+        cfg.compaction.max_context_tokens = tokens;
+        cfg.save()
+    }
+
     /// Update the persisted default alignment preference.
     pub fn set_display_centered(centered: bool) -> anyhow::Result<()> {
         let mut cfg = Self::load_for_update()?;

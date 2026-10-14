@@ -1130,12 +1130,24 @@ fn swarm_dock_engaged(state: &WidgetsState) -> bool {
                 .any(|a| a.placement.kind == WidgetKind::SwarmStatus))
 }
 
+/// Whether the previous frame placed the overview (which merges the usage page)
+/// or the usage widget, so the footer need not repeat the limits.
+pub(crate) fn usage_limits_visible() -> bool {
+    get_or_init_state().as_ref().is_some_and(|state| {
+        state.enabled
+            && state
+                .placements
+                .iter()
+                .any(|p| matches!(p.kind, WidgetKind::Overview | WidgetKind::UsageLimits))
+    })
+}
+
 /// Whether the inline swarm strip (above the status line) should stand down
 /// because the SwarmStatus dock widget (margin HUD) is showing - or was very
 /// recently showing - the same agents.
 ///
 /// The strip is built before widget placement runs each frame, so this checks
-/// the previous frame's state, like [`widget_visible_facts`]. Engagement
+/// the previous frame's state, like [`usage_limits_visible`]. Engagement
 /// includes hidden-in-place anchors, and disengagement is debounced by
 /// [`SWARM_STRIP_STAND_DOWN_LINGER`]: both exist so the dock's frame-to-frame
 /// placement churn cannot toggle the strip row on and off, which resizes the

@@ -20,7 +20,7 @@ fn first_prompt_preserves_welcome_header_spacing() {
             // Track a persistent header row, not the first nonblank screen row.
             let header_y = welcome
                 .lines()
-                .position(|line| line.contains("/model to switch"))
+                .position(|line| line.contains("pj v"))
                 .unwrap();
             assert!(header_y > 0, "header is below the top: {welcome}");
 
@@ -33,7 +33,7 @@ fn first_prompt_preserves_welcome_header_spacing() {
             assert_eq!(
                 submitted
                     .lines()
-                    .position(|line| line.contains("/model to switch")),
+                    .position(|line| line.contains("pj v")),
                 Some(header_y),
                 "submitting must not jump the transcript to the top ({width}x{height} centered={centered}):\nWELCOME:\n{welcome}\nSUBMITTED:\n{submitted}"
             );
@@ -215,7 +215,7 @@ fn test_calculate_input_lines_zero_width() {
 #[test]
 fn test_wrap_input_text_empty() {
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("", 0, 80, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("", 0, 80, "> ", user_color(), 2);
     assert_eq!(lines.len(), 1);
     assert_eq!(cursor_line, 0);
     assert_eq!(cursor_col, 0);
@@ -224,7 +224,7 @@ fn test_wrap_input_text_empty() {
 #[test]
 fn test_wrap_input_text_simple() {
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("hello", 5, 80, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("hello", 5, 80, "> ", user_color(), 2);
     assert_eq!(lines.len(), 1);
     assert_eq!(cursor_line, 0);
     assert_eq!(cursor_col, 5); // cursor at end
@@ -233,7 +233,7 @@ fn test_wrap_input_text_simple() {
 #[test]
 fn test_wrap_input_text_cursor_middle() {
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("hello world", 6, 80, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("hello world", 6, 80, "> ", user_color(), 2);
     assert_eq!(lines.len(), 1);
     assert_eq!(cursor_line, 0);
     assert_eq!(cursor_col, 6); // cursor at 'w'
@@ -243,7 +243,7 @@ fn test_wrap_input_text_cursor_middle() {
 fn test_wrap_input_text_wrapping() {
     // 10 chars with width 5 = 2 lines
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("aaaaaaaaaa", 7, 5, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("aaaaaaaaaa", 7, 5, "> ", user_color(), 2);
     assert_eq!(lines.len(), 2);
     assert_eq!(cursor_line, 1); // second line
     assert_eq!(cursor_col, 2); // 7 - 5 = 2
@@ -252,7 +252,7 @@ fn test_wrap_input_text_wrapping() {
 #[test]
 fn test_wrap_input_text_with_newlines() {
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("hello\nworld", 6, 80, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("hello\nworld", 6, 80, "> ", user_color(), 2);
     assert_eq!(lines.len(), 2);
     assert_eq!(cursor_line, 1); // second line (after newline)
     assert_eq!(cursor_col, 0); // at start of 'world'
@@ -262,7 +262,7 @@ fn test_wrap_input_text_with_newlines() {
 fn test_wrap_input_text_cursor_at_end_of_wrapped() {
     // 10 chars with width 5, cursor at position 10 (end)
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("aaaaaaaaaa", 10, 5, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("aaaaaaaaaa", 10, 5, "> ", user_color(), 2);
     assert_eq!(lines.len(), 2);
     assert_eq!(cursor_line, 1);
     assert_eq!(cursor_col, 5);
@@ -273,7 +273,7 @@ fn test_wrap_input_text_many_lines() {
     // Create text that spans 15 lines when wrapped to width 10
     let text = "a".repeat(150);
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text(&text, 145, 10, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text(&text, 145, 10, "> ", user_color(), 2);
     assert_eq!(lines.len(), 15);
     assert_eq!(cursor_line, 14); // last line
     assert_eq!(cursor_col, 5); // 145 % 10 = 5
@@ -282,35 +282,22 @@ fn test_wrap_input_text_many_lines() {
 #[test]
 fn test_wrap_input_text_multiple_newlines() {
     let (lines, cursor_line, cursor_col) =
-        input_ui::wrap_input_text("a\nb\nc\nd", 6, 80, "1", "> ", user_color(), 3);
+        input_ui::wrap_input_text("a\nb\nc\nd", 6, 80, "> ", user_color(), 2);
     assert_eq!(lines.len(), 4);
     assert_eq!(cursor_line, 3); // on 'd' line
     assert_eq!(cursor_col, 0);
 }
 
 #[test]
-fn test_wrapped_input_line_count_respects_two_digit_prompt_width() {
-    let mut app = TestState {
+fn test_wrapped_input_line_count_reserves_the_rail_width() {
+    let app = TestState {
         input: "abcdefghijk".to_string(),
         cursor_pos: "abcdefghijk".len(),
         ..Default::default()
     };
-    for _ in 0..9 {
-        app.display_messages.push(DisplayMessage {
-            role: "user".to_string(),
-            content: "previous".to_string(),
-            tool_calls: Vec::new(),
-            duration_secs: None,
-            title: None,
-            tool_data: None,
-        });
-    }
-
-    // Old layout math effectively used width 11 here (14 total - hardcoded prompt width 3),
-    // which incorrectly fit this input on a single line. The real prompt is "10> ", width 4,
-    // so the wrapped renderer only has 10 columns and must use 2 lines.
-    assert_eq!(calculate_input_lines(app.input(), 11), 1);
-    assert_eq!(input_ui::wrapped_input_line_count(&app, 14, 10), 2);
+    // The rail "┃ " takes two columns: 13 leaves room for all 11 chars, 12 does not.
+    assert_eq!(input_ui::wrapped_input_line_count(&app, 13), 1);
+    assert_eq!(input_ui::wrapped_input_line_count(&app, 12), 2);
 }
 
 #[test]

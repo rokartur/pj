@@ -127,38 +127,20 @@ fn spawn_resume_in_new_terminal_uses_handterm_exec_mode() {
 
 #[cfg(unix)]
 #[test]
-fn resumed_window_title_includes_server_name_when_registry_matches_socket() {
+fn resumed_window_title_names_the_session_directory() {
     let _guard = crate::storage::lock_test_env();
     let temp_home = tempfile::tempdir().expect("temp home");
-    let temp_runtime = tempfile::tempdir().expect("temp runtime");
-    let socket_path = temp_runtime.path().join("jcode.sock");
     let _home_guard = EnvVarGuard::set_path("JCODE_HOME", temp_home.path());
-    let _socket_guard = EnvVarGuard::set_path("JCODE_SOCKET", &socket_path);
 
-    let mut registry = crate::registry::ServerRegistry::default();
-    registry.register(crate::registry::ServerInfo {
-        id: "server_blazing_123".to_string(),
-        name: "blazing".to_string(),
-        icon: "🔥".to_string(),
-        socket: socket_path,
-        debug_socket: temp_runtime.path().join("jcode-debug.sock"),
-        git_hash: "abc1234".to_string(),
-        version: "v0.1.0".to_string(),
-        pid: std::process::id(),
-        started_at: "2026-01-01T00:00:00Z".to_string(),
-        sessions: Vec::new(),
-    });
-    std::fs::create_dir_all(temp_home.path()).expect("create temp home");
-    std::fs::write(
-        crate::registry::registry_path().expect("registry path"),
-        serde_json::to_string(&registry).expect("serialize registry"),
-    )
-    .expect("write registry");
-
-    assert_eq!(
-        resumed_window_title("session_parrot_123"),
-        "🦜 jcode/blazing Parrot"
+    let mut session = crate::session::Session::create_with_id(
+        "session_parrot_123".to_string(),
+        None,
+        Some("Generated title".to_string()),
     );
+    session.working_dir = Some("/repo/api".to_string());
+    session.save().expect("save session");
+
+    assert_eq!(resumed_window_title("session_parrot_123"), "api | pj");
 }
 
 #[cfg(unix)]

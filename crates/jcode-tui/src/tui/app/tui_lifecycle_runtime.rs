@@ -1,5 +1,4 @@
 use super::*;
-use crate::tui::connection_type_icon;
 
 impl App {
     /// Create an App instance for replay mode (playing back a saved session)
@@ -62,12 +61,7 @@ impl App {
             return;
         }
         if let Some(host) = crate::tui::ssh_remote_host() {
-            let session = self
-                .remote_session_id
-                .as_deref()
-                .or(self.resume_session_id.as_deref())
-                .unwrap_or("connecting");
-            self.set_terminal_title_base(session, format!("jcode SSH {host} {session}"));
+            self.set_terminal_title(crate::process_title::tab_title(None, Some(&host)));
             return;
         }
         let session_id = if self.is_remote {
@@ -77,53 +71,31 @@ impl App {
         } else {
             &self.session.id
         };
-        let session_name = crate::id::extract_session_name(session_id)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| session_id.to_string());
-        let session_icon = crate::id::session_icon(&session_name);
-        // Keep the live terminal title aligned with /resume: an explicit rename
-        // wins, then the model's current todo/goal title, then the generated title.
-        let todo_title = self
-            .session
-            .custom_title
-            .is_none()
-            .then(|| crate::todo::load_session_title(session_id))
-            .flatten();
-        let display_title = self
-            .session
-            .custom_title
-            .as_deref()
-            .or(todo_title.as_deref())
-            .or(self.session.title.as_deref());
+        let session_name = crate::process_title::session_name(session_id);
         let is_canary = if self.is_remote {
             self.remote_is_canary.unwrap_or(self.session.is_canary)
         } else {
             self.session.is_canary
         };
-        let server_name = self.remote_server_short_name.as_deref().unwrap_or("jcode");
-        let icon = connection_type_icon(self.connection_type.as_deref()).unwrap_or(session_icon);
-        let session_label = crate::process_title::terminal_session_label(&session_name, None);
-        let fallback_label = if server_name.eq_ignore_ascii_case("jcode") {
-            format!("jcode {session_label}")
-        } else {
-            format!("jcode/{} {session_label}", server_name.to_lowercase())
-        };
-        if server_name.eq_ignore_ascii_case("jcode") {
-            crate::process_title::set_client_display_title(&session_name, is_canary);
-        } else {
-            crate::process_title::set_client_remote_display_title(
+        match self.remote_server_short_name.as_deref() {
+            Some(server_name) => crate::process_title::set_client_remote_display_title(
                 server_name,
                 &session_name,
                 is_canary,
-            );
+            ),
+            None => crate::process_title::set_client_display_title(&session_name, is_canary),
         }
-        let window_title = crate::process_title::terminal_window_title(
-            icon,
-            display_title,
-            Some(&fallback_label),
-            is_canary,
-        );
-        self.set_terminal_title_base(session_id, window_title);
+        // An explicit rename wins, then the agent's todo/goal title; the
+        // first-prompt title is not a name, so the tab keeps the directory.
+        let name = self
+            .session
+            .custom_title
+            .clone()
+            .or_else(|| crate::todo::load_session_title(session_id));
+        self.set_terminal_title(crate::process_title::tab_title(
+            name.as_deref(),
+            self.session.working_dir.as_deref(),
+        ));
     }
 
     pub(super) fn reconnect_target_session_id(&self) -> Option<String> {

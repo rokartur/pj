@@ -841,6 +841,16 @@ impl App {
             )];
         }
 
+        if prefix.starts_with("/context ") {
+            return self.rank_suggestions(
+                input,
+                ["200k", "500k", "1m"]
+                    .iter()
+                    .map(|size| (format!("/context {size}"), "Context window size"))
+                    .collect(),
+            );
+        }
+
         if prefix.starts_with("/effort ") {
             let efforts = [
                 "none",

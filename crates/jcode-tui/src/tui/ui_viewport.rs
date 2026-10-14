@@ -735,14 +735,16 @@ pub(super) fn draw_messages(
         for abs_idx in active.start_line.max(scroll)..active.end_line.min(visible_end) {
             let rel_idx = abs_idx.saturating_sub(scroll);
             if let Some(line) = visible_lines.get_mut(rel_idx) {
-                if abs_idx == active.start_line {
-                    line.spans.insert(
-                        0,
-                        Span::styled(format!("→ edit#{} ", active.edit_index), highlight_style),
-                    );
+                let prefix = if abs_idx == active.start_line {
+                    Span::styled(format!("→ edit#{} ", active.edit_index), highlight_style)
                 } else {
-                    line.spans.insert(0, Span::styled("  │ ", accent_style));
+                    Span::styled("  │ ", accent_style)
+                };
+                let margin_row = top_band_lines as usize + rel_idx;
+                if let Some(width) = margins.right_widths.get_mut(margin_row) {
+                    *width = (*width).saturating_sub(prefix.width() as u16);
                 }
+                line.spans.insert(0, prefix);
             }
         }
     }
@@ -1278,10 +1280,8 @@ pub(super) fn draw_messages(
         {
             let prompt_text = prompt_text.trim();
             if !prompt_text.is_empty() {
-                let prompt_num =
-                    preview_start + prompt_order + 1 + app.compacted_hidden_user_prompts();
-                let num_str = format!("{}", prompt_num);
-                let prefix_len = num_str.len() + 2;
+                let rail = super::prepare::USER_RAIL;
+                let prefix_len = unicode_width::UnicodeWidthStr::width(rail);
                 let content_width =
                     render_area.width.saturating_sub(prefix_len as u16 + 2) as usize;
                 let dim_style = Style::default().dim();
@@ -1298,9 +1298,8 @@ pub(super) fn draw_messages(
                 let preview_lines: Vec<Line<'static>> = if !is_long {
                     vec![
                         Line::from(vec![
-                            Span::styled(num_str.clone(), dim_style.fg(dim_color()).bg(user_bg())),
-                            Span::styled("› ", dim_style.fg(user_color()).bg(user_bg())),
-                            Span::styled(text_flat, dim_style.fg(user_text()).bg(user_bg())),
+                            Span::styled(rail, dim_style.fg(user_color())),
+                            Span::styled(text_flat, dim_style.fg(user_text())),
                         ])
                         .alignment(align),
                     ]
@@ -1311,21 +1310,19 @@ pub(super) fn draw_messages(
                     let tail: String = text_chars[tail_start..].iter().collect();
 
                     let first = Line::from(vec![
-                        Span::styled(num_str.clone(), dim_style.fg(dim_color()).bg(user_bg())),
-                        Span::styled("› ", dim_style.fg(user_color()).bg(user_bg())),
+                        Span::styled(rail, dim_style.fg(user_color())),
                         Span::styled(
                             format!("{} ...", head.trim_end()),
-                            dim_style.fg(user_text()).bg(user_bg()),
+                            dim_style.fg(user_text()),
                         ),
                     ])
                     .alignment(align);
 
-                    let padding: String = " ".repeat(prefix_len);
                     let second = Line::from(vec![
-                        Span::styled(padding, dim_style.bg(user_bg())),
+                        Span::styled(rail, dim_style.fg(user_color())),
                         Span::styled(
                             format!("... {}", tail.trim_start()),
-                            dim_style.fg(user_text()).bg(user_bg()),
+                            dim_style.fg(user_text()),
                         ),
                     ])
                     .alignment(align);

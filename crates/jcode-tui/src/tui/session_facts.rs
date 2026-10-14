@@ -43,30 +43,6 @@ pub(crate) fn dir_label(path: &str) -> String {
     trimmed.to_string()
 }
 
-/// Compact home-relative directory label that elides intermediate segments,
-/// e.g. `/home/me/a/b/c` -> `…/b/c` and `~/a/b/c` -> `~/…/c`. Used where space
-/// is tight (status line, overscroll, compact fact stack).
-pub(crate) fn dir_label_short(path: &str) -> Option<String> {
-    let trimmed = path.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        return None;
-    }
-    let display = dir_label(trimmed);
-    let segs: Vec<&str> = display.split('/').filter(|s| !s.is_empty()).collect();
-    let short = if display.starts_with('~') {
-        if segs.len() <= 2 {
-            display.clone()
-        } else {
-            format!("~/…/{}", segs[segs.len() - 1])
-        }
-    } else if segs.len() <= 2 {
-        format!("/{}", segs.join("/"))
-    } else {
-        format!("…/{}/{}", segs[segs.len() - 2], segs[segs.len() - 1])
-    };
-    Some(short)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,12 +64,5 @@ mod tests {
         assert_eq!(dir_label("/var/log/"), "/var/log");
         assert_eq!(dir_label("/"), "/");
         assert_eq!(dir_label("   "), "/");
-    }
-
-    #[test]
-    fn dir_label_short_elides_middle_segments() {
-        assert_eq!(dir_label_short("/a/b"), Some("/a/b".to_string()));
-        assert_eq!(dir_label_short("/a/b/c/d"), Some("…/c/d".to_string()));
-        assert_eq!(dir_label_short(""), None);
     }
 }

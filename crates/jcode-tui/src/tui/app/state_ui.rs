@@ -818,28 +818,6 @@ impl App {
         self.prewarm_focused_side_panel();
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_remote_server_identity_for_tests(
-        &mut self,
-        name: Option<&str>,
-        icon: Option<&str>,
-        version: Option<&str>,
-        session_id: Option<&str>,
-    ) {
-        self.is_remote = true;
-        self.remote_server_short_name = name.map(str::to_string);
-        self.remote_server_icon = icon.map(str::to_string);
-        self.remote_server_version = version.map(str::to_string);
-        self.remote_session_id = session_id.map(str::to_string);
-    }
-
-    /// Set the displayed remote connection type (e.g. "https/sse") for header
-    /// tests. `None` clears it (unknown connection).
-    #[cfg(test)]
-    pub(crate) fn set_connection_type_for_tests(&mut self, connection_type: Option<&str>) {
-        self.connection_type = connection_type.map(str::to_string);
-    }
-
     fn prewarm_focused_side_panel(&self) {
         let Ok((terminal_width, terminal_height)) = crossterm::terminal::size() else {
             return;
@@ -2054,6 +2032,30 @@ pub(super) fn handle_info_command(app: &mut App, trimmed: &str) -> bool {
             title: None,
             tool_data: None,
         });
+        return true;
+    }
+
+    if let Some(size) = trimmed.strip_prefix("/context ") {
+        let cap = match size.trim() {
+            "200k" => 200_000,
+            "500k" => 500_000,
+            "1m" => 0,
+            other => {
+                app.push_display_message(DisplayMessage::error(format!(
+                    "Unknown context size `{other}`. Use /context 200k, 500k or 1m."
+                )));
+                return true;
+            }
+        };
+        if let Err(error) = crate::config::Config::set_compaction_max_context_tokens(cap) {
+            app.push_display_message(DisplayMessage::error(format!(
+                "Failed to save context size: {error}"
+            )));
+            return true;
+        }
+        let model = app.provider.model();
+        app.update_context_limit_for_model(&model, None);
+        app.set_status_notice(format!("Context: {}", size.trim()));
         return true;
     }
 

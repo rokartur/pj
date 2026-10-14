@@ -168,7 +168,9 @@ fn create_tool_error_copy_test_app() -> (App, ratatui::Terminal<ratatui::backend
                 id: "tool_1".to_string(),
                 name: "bash".to_string(),
                 input: serde_json::json!({"command": "cat /root/secret"}),
-                intent: None, thought_signature: None, },
+                intent: None,
+                thought_signature: None,
+            },
         ),
     ];
     app.bump_display_messages_version();
@@ -195,7 +197,9 @@ fn create_tool_failed_output_copy_test_app()
                 id: "tool_1".to_string(),
                 name: "bash".to_string(),
                 input: serde_json::json!({"command": "cat /root/secret"}),
-                intent: None, thought_signature: None, },
+                intent: None,
+                thought_signature: None,
+            },
         ),
     ];
     app.bump_display_messages_version();
@@ -509,8 +513,14 @@ fn test_chat_mouse_scroll_requests_immediate_redraw_during_streaming() {
         modifiers: KeyModifiers::empty(),
     });
 
-    assert!(app.auto_scroll_paused, "scroll state should update immediately");
-    assert_ne!(app.scroll_offset, 0, "scroll offset should change immediately");
+    assert!(
+        app.auto_scroll_paused,
+        "scroll state should update immediately"
+    );
+    assert_ne!(
+        app.scroll_offset, 0,
+        "scroll offset should change immediately"
+    );
     assert!(
         !scroll_only,
         "chat mouse wheel scrolls should request immediate redraw while streaming"
@@ -786,15 +796,15 @@ fn test_local_typing_snaps_rendered_viewport_to_bottom_in_one_frame() {
     let (mut app, mut terminal) = create_scroll_test_app(50, 12, 0, 32);
     let _ = render_and_snap(&app, &mut terminal);
     let max_scroll = crate::tui::ui::last_max_scroll();
-    assert!(max_scroll > 8, "expected a long transcript, got {max_scroll}");
+    assert!(
+        max_scroll > 8,
+        "expected a long transcript, got {max_scroll}"
+    );
 
     app.auto_scroll_paused = true;
     app.scroll_offset = max_scroll - 8;
     let _ = render_and_snap(&app, &mut terminal);
-    assert_eq!(
-        crate::tui::ui::last_resolved_chat_scroll(),
-        max_scroll - 8
-    );
+    assert_eq!(crate::tui::ui::last_resolved_chat_scroll(), max_scroll - 8);
 
     app.handle_key(KeyCode::Char('x'), KeyModifiers::empty())
         .unwrap();
@@ -924,7 +934,10 @@ fn test_local_alt_m_hidden_side_panel_stays_hidden_across_snapshot_update() {
     app.handle_key(KeyCode::Char('m'), KeyModifiers::ALT)
         .unwrap();
     assert_eq!(app.side_panel.focused_page_id.as_deref(), Some("plan"));
-    assert_eq!(app.status_notice(), Some("Side panel: Updated plan".to_string()));
+    assert_eq!(
+        app.status_notice(),
+        Some("Side panel: Updated plan".to_string())
+    );
 }
 
 #[test]
@@ -971,14 +984,15 @@ fn test_images_do_not_drive_side_panel_visibility() {
     let mut app = create_test_app();
     app.is_remote = true;
     app.side_panel = crate::side_panel::SidePanelSnapshot::default();
-    app.remote_side_pane_images.push(crate::session::RenderedImage {
-        history_message_index: None,
-        media_type: "image/png".to_string(),
-        data: "image-data".to_string(),
-        label: Some("preview.png".to_string()),
-        source: crate::session::RenderedImageSource::UserInput,
-        anchor: None,
-    });
+    app.remote_side_pane_images
+        .push(crate::session::RenderedImage {
+            history_message_index: None,
+            media_type: "image/png".to_string(),
+            data: "image-data".to_string(),
+            label: Some("preview.png".to_string()),
+            source: crate::session::RenderedImageSource::UserInput,
+            anchor: None,
+        });
 
     // Auto-hide bookkeeping is now a no-op for images.
     assert!(!app.update_pinned_images_auto_hide());
@@ -1305,52 +1319,53 @@ fn retained_frame_row_matches_the_rendered_screen() {
     let scroll = crate::tui::ui::last_resolved_chat_scroll();
     assert!(scroll > 0, "fixture must be scrolled into history");
     let frame = crate::tui::ui::last_chat_frame().expect("frame published after a render");
-    let top_row = frame
-        .wrapped_plain_line(scroll)
-        .expect("resolved row is in range")
-        .trim()
-        .to_string();
+    // Messages are separated by blank rows, so compare the first row that carries text.
+    let (offset, top_row) = (0..10)
+        .map(|offset| {
+            let row = frame
+                .wrapped_plain_line(scroll + offset)
+                .expect("resolved row is in range");
+            (offset, row.trim().to_string())
+        })
+        .find(|(_, row)| !row.is_empty())
+        .expect("frame row must carry text");
 
     let area = crate::tui::ui::last_layout_snapshot()
         .expect("layout snapshot")
         .messages_area;
     let first_chat_line = buffer_to_text(&terminal)
         .lines()
-        .skip(area.y as usize)
-        .find(|line| !line.trim().is_empty())
+        .nth(area.y as usize + offset)
         .unwrap_or("")
         .trim()
         .to_string();
-
-    assert!(!top_row.is_empty(), "frame row must carry text");
-    assert_eq!(
-        first_chat_line, top_row,
-        "the retained frame's row must be the line rendered at the top of the viewport"
+    // Info widgets may overlay the right edge of the row.
+    assert!(
+        first_chat_line.starts_with(&top_row),
+        "the retained frame's row must be the line rendered at the top of the viewport: {first_chat_line:?} vs {top_row:?}"
     );
 }
 
-/// Real App: the session status line is always pinned as the last row, with
-/// a pink model, and scrolling (up or down, at the bottom or not) never hides
-/// it or shows an elastic countdown.
+/// Real App: the footer is always pinned as the last rows, and scrolling (up
+/// or down, at the bottom or not) never hides it or shows an elastic countdown.
 #[test]
-fn status_line_is_always_pinned_with_pink_model_on_real_app() {
+fn footer_is_always_pinned_on_real_app() {
     let _lock = scroll_render_test_lock();
     for width in [120u16, 60] {
         let (mut app, mut terminal) = create_scroll_test_app(width, 30, 0, 36);
-        let pink = ratatui::style::Color::Rgb(255, 135, 200);
-        let last_row_pink_cells = |terminal: &ratatui::Terminal<ratatui::backend::TestBackend>| {
+        let last_row = |terminal: &ratatui::Terminal<ratatui::backend::TestBackend>| {
             let buf = terminal.backend().buffer();
             let y = buf.area.height - 1;
             (0..buf.area.width)
-                .filter(|&x| buf[(x, y)].fg == pink && buf[(x, y)].symbol().trim() != "")
-                .count()
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
         };
 
         let at_rest = render_and_snap(&app, &mut terminal);
         assert!(!at_rest.contains("(overscroll"), "w={width}: {at_rest}");
         assert!(
-            last_row_pink_cells(&terminal) >= 3,
-            "pinned pink model at rest (w={width}): {at_rest}"
+            last_row(&terminal).starts_with("~/"),
+            "pinned footer at rest (w={width}): {at_rest}"
         );
 
         for kind in [
@@ -1367,8 +1382,8 @@ fn status_line_is_always_pinned_with_pink_model_on_real_app() {
             let frame = render_and_snap(&app, &mut terminal);
             assert!(!frame.contains("(overscroll"), "w={width}: {frame}");
             assert!(
-                last_row_pink_cells(&terminal) >= 3,
-                "status line stays pinned after {kind:?} (w={width}): {frame}"
+                last_row(&terminal).starts_with("~/"),
+                "footer stays pinned after {kind:?} (w={width}): {frame}"
             );
         }
     }
@@ -1394,26 +1409,44 @@ fn agent_edited_paths_come_from_transcript_edit_tools() {
             },
         )
     };
-    app.display_messages.push(tool("edit", serde_json::json!({"file_path": "a/src/x.rs"})));
+    app.display_messages
+        .push(tool("edit", serde_json::json!({"file_path": "a/src/x.rs"})));
     app.display_messages.push(tool(
         "apply_patch",
         serde_json::json!({"patch_text": "*** Begin Patch\n*** Update File: /repo/README.md\n@@\n-a\n+b\n*** End Patch"}),
     ));
-    app.display_messages.push(tool("read", serde_json::json!({"file_path": "a/src/y.rs"})));
+    app.display_messages
+        .push(tool("read", serde_json::json!({"file_path": "a/src/y.rs"})));
     app.bump_display_messages_version();
 
     let data = app.info_widget_data();
     let set = &data.agent_edited;
-    assert!(set.contains(std::path::Path::new("/repo/crates/a/src/x.rs")), "{set:?}");
-    assert!(set.contains(std::path::Path::new("/repo/README.md")), "{set:?}");
-    assert!(!set.contains(std::path::Path::new("/repo/crates/a/src/y.rs")), "reads are not edits");
+    assert!(
+        set.contains(std::path::Path::new("/repo/crates/a/src/x.rs")),
+        "{set:?}"
+    );
+    assert!(
+        set.contains(std::path::Path::new("/repo/README.md")),
+        "{set:?}"
+    );
+    assert!(
+        !set.contains(std::path::Path::new("/repo/crates/a/src/y.rs")),
+        "reads are not edits"
+    );
 
     // Cached until the transcript changes, then refreshed.
     let again = app.info_widget_data().agent_edited;
     assert!(std::sync::Arc::ptr_eq(&data.agent_edited, &again));
-    app.display_messages.push(tool("write", serde_json::json!({"file_path": "/repo/new.rs"})));
+    app.display_messages.push(tool(
+        "write",
+        serde_json::json!({"file_path": "/repo/new.rs"}),
+    ));
     app.bump_display_messages_version();
-    assert!(app.info_widget_data().agent_edited.contains(std::path::Path::new("/repo/new.rs")));
+    assert!(
+        app.info_widget_data()
+            .agent_edited
+            .contains(std::path::Path::new("/repo/new.rs"))
+    );
 }
 
 /// End to end on a real git repository: the production gather computes
@@ -1428,7 +1461,14 @@ fn changes_widget_end_to_end_on_real_git_repo() {
     let root = dir.path().canonicalize().unwrap();
     let git = |args: &[&str]| {
         let ok = Command::new("git")
-            .args(["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false"])
+            .args([
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "-c",
+                "commit.gpgsign=false",
+            ])
             .args(args)
             .current_dir(&root)
             .output()
@@ -1463,29 +1503,55 @@ fn changes_widget_end_to_end_on_real_git_repo() {
     write("src/lib.rs", b"a\nB\nc\nd\ne\nf\n"); // +3 -1, newest
 
     let info = crate::tui::app::helpers::gather_git_info_in(Some(&root)).expect("repo");
-    let find = |p: &str| info.dirty_files.iter().find(|f| f.path.ends_with(p)).cloned();
+    let find = |p: &str| {
+        info.dirty_files
+            .iter()
+            .find(|f| f.path.ends_with(p))
+            .cloned()
+    };
 
     let lib = find("src/lib.rs").expect("lib");
-    assert_eq!((lib.status, lib.added, lib.removed), ('M', Some(3), Some(1)));
+    assert_eq!(
+        (lib.status, lib.added, lib.removed),
+        ('M', Some(3), Some(1))
+    );
     let untracked = find("nested/dir/new.rs").expect("untracked listed individually");
-    assert_eq!((untracked.status, untracked.added, untracked.removed), ('?', Some(3), Some(0)));
+    assert_eq!(
+        (untracked.status, untracked.added, untracked.removed),
+        ('?', Some(3), Some(0))
+    );
     let gone = find("gone.txt").expect("deleted");
-    assert_eq!((gone.status, gone.added, gone.removed), ('D', Some(0), Some(3)));
+    assert_eq!(
+        (gone.status, gone.added, gone.removed),
+        ('D', Some(0), Some(3))
+    );
     let renamed = find("new_name.rs").expect("renamed");
     assert_eq!(renamed.status, 'R');
     let bin = find("logo.bin").expect("binary");
-    assert_eq!((bin.added, bin.removed), (None, None), "binary has no counts");
+    assert_eq!(
+        (bin.added, bin.removed),
+        (None, None),
+        "binary has no counts"
+    );
     assert_eq!(info.dirty_total, 5);
     assert_eq!(info.added_total, 3 + 3 + renamed.added.unwrap_or(0));
     assert_eq!(info.removed_total, 1 + 3 + renamed.removed.unwrap_or(0));
     assert_eq!(info.dirty_files[0].path, "src/lib.rs", "newest first");
-    assert_eq!(info.dirty_files.last().unwrap().path, "gone.txt", "no mtime sorts last");
+    assert_eq!(
+        info.dirty_files.last().unwrap().path,
+        "gone.txt",
+        "no mtime sorts last"
+    );
     assert_eq!(info.repo_root.as_deref(), Some(root.as_path()));
     // Commits widget data comes from the same probe against real git output.
     assert_eq!(info.recent_commits.len(), 1, "{:?}", info.recent_commits);
     let init = &info.recent_commits[0];
     assert_eq!(init.subject, "init");
-    assert_eq!((init.added, init.removed), (Some(9), Some(0)), "text lines only");
+    assert_eq!(
+        (init.added, init.removed),
+        (Some(9), Some(0)),
+        "text lines only"
+    );
     assert!(!init.unpushed, "no upstream means ahead=0");
     assert!(init.timestamp > 0 && init.hash.len() >= 7);
 
@@ -1517,13 +1583,22 @@ fn changes_widget_end_to_end_on_real_git_repo() {
             .unwrap_or_else(|| panic!("{needle:?} missing:\n{frame}"))
             .to_string()
     };
-    assert!(row("lib.rs").contains("M● src/lib.rs"), "agent dot on edited file:\n{frame}");
+    assert!(
+        row("lib.rs").contains("M● src/lib.rs"),
+        "agent dot on edited file:\n{frame}"
+    );
     assert!(row("new_name.rs").contains("R  new_name.rs"), "{frame}");
     assert!(row("gone.txt").contains("D  gone.txt"), "{frame}");
     assert!(row("lib.rs").contains("+3 −1"), "{frame}");
-    assert!(row("new.rs").contains("?  new.rs"), "no dot on files agent did not edit:\n{frame}");
+    assert!(
+        row("new.rs").contains("?  new.rs"),
+        "no dot on files agent did not edit:\n{frame}"
+    );
     assert!(row("new.rs").contains("+3 −0"), "{frame}");
-    assert!(!row("logo.bin").contains('+'), "binary shows no counts:\n{frame}");
+    assert!(
+        !row("logo.bin").contains('+'),
+        "binary shows no counts:\n{frame}"
+    );
     assert!(
         frame.contains("● agent"),
         "legend explains the dot when one is shown:\n{frame}"
@@ -1544,9 +1619,15 @@ fn changes_widget_end_to_end_on_real_git_repo() {
     let changes_rows: Vec<_> = frame2
         .lines()
         .filter(|line| {
-            ["src/lib.rs", "new.rs", "logo.bin", "new_name.rs", "gone.txt"]
-                .iter()
-                .any(|path| line.contains(path))
+            [
+                "src/lib.rs",
+                "new.rs",
+                "logo.bin",
+                "new_name.rs",
+                "gone.txt",
+            ]
+            .iter()
+            .any(|path| line.contains(path))
         })
         .collect();
     assert_eq!(changes_rows.len(), 5, "{frame2}");

@@ -32,8 +32,6 @@ fn prepare_body_preserves_multiline_user_prompt_lines() {
         &mut line_raw_overrides,
         &mut line_copy_offsets,
         &mut user_line_indices,
-        1,
-        user_color(),
         "first line\nsecond line\n\nthird line",
         ratatui::layout::Alignment::Left,
     );
@@ -41,16 +39,16 @@ fn prepare_body_preserves_multiline_user_prompt_lines() {
     let plain: Vec<String> = lines.iter().map(ui::line_plain_text).collect();
 
     assert_eq!(plain.len(), 4);
-    assert_eq!(plain[0], "1› first line");
-    assert_eq!(plain[1], "   second line");
-    assert_eq!(plain[2], "   ");
-    assert_eq!(plain[3], "   third line");
+    assert_eq!(plain[0], "┃ first line");
+    assert_eq!(plain[1], "┃ second line");
+    assert_eq!(plain[2], "┃ ");
+    assert_eq!(plain[3], "┃ third line");
     assert_eq!(
         raw_plain_lines,
         vec!["first line", "second line", "", "third line"]
     );
     assert_eq!(user_line_indices, vec![0]);
-    assert_eq!(line_copy_offsets, vec![3, 3, 3, 3]);
+    assert_eq!(line_copy_offsets, vec![2, 2, 2, 2]);
 }
 
 /// A wrapped row re-seeds its prefix: list items repeat their hanging indent
@@ -157,8 +155,6 @@ fn wrapped_copy_rows_match_visible_content_at_reported_widths() {
             &mut maps,
             &mut offsets,
             &mut users,
-            1,
-            user_color(),
             &text,
             ratatui::layout::Alignment::Left,
         );

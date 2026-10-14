@@ -1190,8 +1190,7 @@ fn visual_line_move_in_composer(app: &App, code: KeyCode) -> Option<usize> {
 
     let width = composer_area_width()?;
     let state: &dyn crate::tui::TuiState = app;
-    let next_prompt = input_ui::next_input_prompt_number(state);
-    let line_width = input_ui::composer_line_width(state, width, next_prompt)?;
+    let line_width = input_ui::composer_line_width(state, width)?;
     let delta = match code {
         KeyCode::Up => -1,
         KeyCode::Down => 1,

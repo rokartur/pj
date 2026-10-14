@@ -713,8 +713,7 @@ fn test_mouse_click_in_input_moves_cursor_to_clicked_position() {
 
     let layout = crate::tui::ui::last_layout_snapshot().expect("layout snapshot");
     let input_area = layout.input_area.expect("input area");
-    let next_prompt = crate::tui::ui::input_ui::next_input_prompt_number(&app);
-    let prompt_len = crate::tui::ui::input_ui::input_prompt_len(&app, next_prompt) as u16;
+    let prompt_len = crate::tui::ui::input_ui::input_prompt_len(&app) as u16;
 
     let handled = app.handle_mouse_event(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
@@ -805,8 +804,7 @@ fn test_mouse_click_in_input_switches_focus_from_side_panel() {
 
     let layout = crate::tui::ui::last_layout_snapshot().expect("layout snapshot");
     let input_area = layout.input_area.expect("input area");
-    let next_prompt = crate::tui::ui::input_ui::next_input_prompt_number(&app);
-    let prompt_len = crate::tui::ui::input_ui::input_prompt_len(&app, next_prompt) as u16;
+    let prompt_len = crate::tui::ui::input_ui::input_prompt_len(&app) as u16;
 
     let handled = app.handle_mouse_event(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
@@ -832,7 +830,7 @@ fn test_mouse_click_in_wrapped_input_moves_cursor_to_second_visual_line() {
     app.push_display_message(DisplayMessage::assistant("seed transcript"));
     app.diagram_mode = crate::config::DiagramDisplayMode::None;
     app.diagram_pane_enabled = false;
-    app.input = "abcdefghij".to_string();
+    app.input = "abcdefghijklmnop".to_string();
     app.cursor_pos = 0;
     app.set_centered(false);
     app.session.short_name = Some("test".to_string());
@@ -851,10 +849,9 @@ fn test_mouse_click_in_wrapped_input_moves_cursor_to_second_visual_line() {
         modifiers: KeyModifiers::empty(),
     });
 
-    // The idle composer no longer reserves space for the old send-mode glyph,
-    // so this 11-column input wraps after eight characters. Column four on the
-    // second visual line is one character into that segment.
-    assert_eq!(app.cursor_pos, 9);
+    // The 2-column "┃ " rail leaves nine characters per row of this 11-column
+    // input. Column four on the second visual line is two characters into it.
+    assert_eq!(app.cursor_pos, 11);
 }
 
 /// End-to-end: a real left-click on an inline image's label line maps the
@@ -1543,8 +1540,7 @@ fn test_copy_selection_partial_drag_over_inline_math_copies_whole_formula() {
             text.contains("Euler").then_some((abs, text))
         })
         .expect("prose line");
-    let euler_col =
-        unicode_width::UnicodeWidthStr::width(&text[..text.find("Euler").unwrap()]);
+    let euler_col = unicode_width::UnicodeWidthStr::width(&text[..text.find("Euler").unwrap()]);
     // Drag from the start of "Euler" to two cells into the formula.
     let start_col = euler_col;
     let end_col = euler_col + "Euler ".len() + 2;
@@ -1579,7 +1575,10 @@ fn test_unicode_math_copy_badge_copies_latex_to_clipboard() {
     let clipboard = CapturedClipboard::new();
     let (mut app, mut terminal) = create_math_copy_test_app();
     let screen = render_and_snap(&app, &mut terminal);
-    assert!(screen.contains("[S]"), "math frame should get a badge: {screen}");
+    assert!(
+        screen.contains("[S]"),
+        "math frame should get a badge: {screen}"
+    );
 
     app.handle_key(KeyCode::Char('S'), KeyModifiers::ALT)
         .unwrap();

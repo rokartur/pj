@@ -6,45 +6,6 @@ pub(super) fn semver() -> &'static str {
     SEMVER.get_or_init(|| format!("v{}", jcode_build_meta::semver()))
 }
 
-/// True when this process is running from the stable release binary path.
-/// Only matches the explicit ~/.jcode/builds/stable/jcode path, NOT
-/// ~/.local/bin/jcode launcher path (which now points to current).
-pub(super) fn is_running_stable_release() -> bool {
-    static IS_STABLE: OnceLock<bool> = OnceLock::new();
-    *IS_STABLE.get_or_init(|| {
-        // Use the raw symlink target (read_link), not canonicalize, to
-        // check whether we're on the stable channel link.
-        let current_exe = match std::env::current_exe().ok() {
-            Some(path) => path,
-            None => return false,
-        };
-
-        // Check if we were launched via the stable symlink
-        if let Ok(stable_path) = crate::build::stable_binary_path() {
-            // Compare the symlink target (not canonical) to distinguish
-            // direct stable-channel execution from launcher/current links.
-            let stable_target =
-                std::fs::read_link(&stable_path).unwrap_or_else(|_| stable_path.clone());
-            let current_target =
-                std::fs::read_link(&current_exe).unwrap_or_else(|_| current_exe.clone());
-            if stable_target == current_target {
-                return true;
-            }
-            // Also check canonical paths for when launched directly
-            if let (Ok(stable_canon), Ok(current_canon)) = (
-                std::fs::canonicalize(&stable_path),
-                std::fs::canonicalize(&current_exe),
-            ) && stable_canon == current_canon
-                && !current_exe.to_string_lossy().contains("target/release")
-            {
-                return true;
-            }
-        }
-
-        false
-    })
-}
-
 #[cfg(test)]
 pub(crate) fn calculate_input_lines(input: &str, line_width: usize) -> usize {
     use unicode_width::UnicodeWidthChar;
@@ -66,37 +27,6 @@ pub(crate) fn calculate_input_lines(input: &str, line_width: usize) -> usize {
         }
     }
     total_lines.max(1)
-}
-
-pub(super) fn shorten_model_name(model: &str) -> String {
-    if model.contains('/') {
-        return model.to_string();
-    }
-    if model.contains("opus") {
-        if model.contains("4-5") || model.contains("4.5") {
-            return "claude4.5opus".to_string();
-        }
-        return "claudeopus".to_string();
-    }
-    if model.contains("sonnet") {
-        if model.contains("3-5") || model.contains("3.5") {
-            return "claude3.5sonnet".to_string();
-        }
-        return "claudesonnet".to_string();
-    }
-    if model.contains("haiku") {
-        return "claudehaiku".to_string();
-    }
-    if model.starts_with("gpt-5") {
-        return model.replace("gpt-", "gpt").replace("-", "");
-    }
-    if model.starts_with("gpt-4") {
-        return model.replace("gpt-", "").replace("-", "");
-    }
-    if model.starts_with("gpt-3") {
-        return "gpt3.5".to_string();
-    }
-    model.split('-').take(3).collect::<Vec<_>>().join("")
 }
 
 pub(super) fn format_status_for_debug(app: &dyn TuiState) -> String {
