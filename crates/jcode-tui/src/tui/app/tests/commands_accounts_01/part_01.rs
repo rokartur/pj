@@ -1170,7 +1170,7 @@ fn test_btw_command_forks_session_with_question() {
     assert!(msg.content.contains("created for the next prompt"));
     let session_id = msg
         .content
-        .split("jcode --resume ")
+        .split("pj --resume ")
         .nth(1)
         .expect("missing resume hint")
         .trim()
@@ -1207,7 +1207,7 @@ fn test_fork_command_with_prompt_forks_session() {
     assert!(msg.content.contains("created for the next prompt"));
     let session_id = msg
         .content
-        .split("jcode --resume ")
+        .split("pj --resume ")
         .nth(1)
         .expect("missing resume hint")
         .trim()
@@ -1243,7 +1243,7 @@ fn test_fork_command_without_prompt_forks_idle_session() {
     assert!(msg.content.contains("✂ Fork →"));
     let session_id = msg
         .content
-        .split("jcode --resume ")
+        .split("pj --resume ")
         .nth(1)
         .expect("missing resume hint")
         .trim()

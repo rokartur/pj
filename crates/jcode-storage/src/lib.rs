@@ -112,12 +112,12 @@ pub fn runtime_dir() -> PathBuf {
         return PathBuf::from(dir);
     }
     if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
-        return PathBuf::from(dir);
+        return pj_runtime_subdir(PathBuf::from(dir));
     }
     #[cfg(target_os = "macos")]
     {
         if let Ok(dir) = std::env::var("TMPDIR") {
-            return PathBuf::from(dir);
+            return pj_runtime_subdir(PathBuf::from(dir));
         }
     }
 
@@ -127,7 +127,14 @@ pub fn runtime_dir() -> PathBuf {
 }
 
 fn fallback_runtime_dir() -> PathBuf {
-    std::env::temp_dir().join(format!("jcode-{}", runtime_user_discriminator()))
+    std::env::temp_dir().join(format!("pj-{}", runtime_user_discriminator()))
+}
+
+/// pj: keeps pj's daemon socket apart from a jcode daemon in the same runtime dir.
+fn pj_runtime_subdir(platform_dir: PathBuf) -> PathBuf {
+    let dir = platform_dir.join("pj");
+    ensure_private_runtime_dir(&dir);
+    dir
 }
 
 #[cfg(unix)]
@@ -166,7 +173,7 @@ pub fn jcode_dir() -> Result<PathBuf> {
     }
 
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
-    Ok(home.join(".jcode"))
+    Ok(home.join(".pj"))
 }
 
 /// Whether `JCODE_HOME` redirects this process away from the user's real
@@ -178,7 +185,7 @@ pub fn running_with_sandboxed_home() -> bool {
     let Some(configured) = std::env::var_os("JCODE_HOME").map(PathBuf::from) else {
         return false;
     };
-    let Some(default) = dirs::home_dir().map(|home| home.join(".jcode")) else {
+    let Some(default) = dirs::home_dir().map(|home| home.join(".pj")) else {
         return true;
     };
 
@@ -225,7 +232,7 @@ pub fn app_config_dir() -> Result<PathBuf> {
 
     let config_dir =
         dirs::config_dir().ok_or_else(|| anyhow::anyhow!("No config directory found"))?;
-    Ok(config_dir.join("jcode"))
+    Ok(config_dir.join("pj"))
 }
 
 /// Resolve a path under the user's home directory, but sandbox it under

@@ -459,14 +459,14 @@ pub(super) fn poll_local_transfer_prepare(app: &mut App) -> bool {
                         }
                         Ok(false) => {
                             app.push_display_message(DisplayMessage::system(format!(
-                                "↗ Transfer session {} created.\n\nNo terminal was opened automatically. Resume manually:\n\n  jcode --resume {}",
+                                "↗ Transfer session {} created.\n\nNo terminal was opened automatically. Resume manually:\n\n  pj --resume {}",
                                 prepared.session_name, prepared.session_id
                             )));
                             app.set_status_notice("Transfer session created");
                         }
                         Err(error) => {
                             app.push_display_message(DisplayMessage::error(format!(
-                                "Transfer session {} was created but failed to open a window: {}\n\nResume manually: jcode --resume {}",
+                                "Transfer session {} was created but failed to open a window: {}\n\nResume manually: pj --resume {}",
                                 prepared.session_name, error, prepared.session_id
                             )));
                             app.set_status_notice("Transfer open failed");
@@ -2519,10 +2519,9 @@ fn handle_selfdev_command(app: &mut App, trimmed: &str) -> bool {
                 format!(
                     "Created self-dev session {} but could not auto-open a supported terminal.\n\nRun manually:\n{}",
                     launch.session_id,
-                    launch.command_preview().unwrap_or_else(|| format!(
-                        "jcode --resume {} self-dev",
-                        launch.session_id
-                    ))
+                    launch
+                        .command_preview()
+                        .unwrap_or_else(|| format!("pj --resume {} self-dev", launch.session_id))
                 )
             };
 

@@ -165,8 +165,8 @@ pub(super) fn get_unseen_changelog_entries() -> &'static Vec<String> {
         }
 
         let state_file = dirs::home_dir()
-            .map(|h| h.join(".jcode").join("last_seen_changelog"))
-            .unwrap_or_else(|| std::path::PathBuf::from(".jcode/last_seen_changelog"));
+            .map(|h| h.join(".pj").join("last_seen_changelog"))
+            .unwrap_or_else(|| std::path::PathBuf::from(".pj/last_seen_changelog"));
 
         let last_seen_hash = std::fs::read_to_string(&state_file)
             .ok()

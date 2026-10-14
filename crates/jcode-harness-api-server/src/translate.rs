@@ -2651,7 +2651,7 @@ impl BridgeState {
         }
         let home = match std::env::var_os("JCODE_HOME") {
             Some(home) => std::path::PathBuf::from(home),
-            None => std::path::Path::new(&std::env::var_os("HOME")?).join(".jcode"),
+            None => std::path::Path::new(&std::env::var_os("HOME")?).join(".pj"),
         };
         Some(home.join("sessions").join(format!("{session_id}.json")))
     }
@@ -2777,7 +2777,7 @@ impl BridgeState {
         std::env::var_os("JCODE_HOME")
             .map(std::path::PathBuf::from)
             .or_else(|| {
-                std::env::var_os("HOME").map(|home| std::path::Path::new(&home).join(".jcode"))
+                std::env::var_os("HOME").map(|home| std::path::Path::new(&home).join(".pj"))
             })
     }
 

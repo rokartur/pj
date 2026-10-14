@@ -732,7 +732,7 @@ fn resolve_resume_arg(args: &mut Args) -> Result<()> {
                     ResumeResolutionFailureAction::Exit => {
                         eprintln!("Error: {}", e);
                         if !output::quiet_enabled() {
-                            eprintln!("\nUse `jcode --resume` to list available sessions.");
+                            eprintln!("\nUse `pj --resume` to list available sessions.");
                         }
                         std::process::exit(1);
                     }

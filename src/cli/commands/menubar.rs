@@ -502,7 +502,7 @@ mod macos {
 
            impl MenuHandler {
                /// Open the clicked session (stored in the item's representedObject)
-               /// in a new terminal window via `jcode --resume <id>`.
+               /// in a new terminal window via `pj --resume <id>`.
                #[unsafe(method(openSession:))]
                fn open_session(&self, sender: &NSMenuItem)
     {

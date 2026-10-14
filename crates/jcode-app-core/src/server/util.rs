@@ -1101,7 +1101,8 @@ mod newest_reload_candidate_integration_tests {
             .join("versions")
             .join(version);
         std::fs::create_dir_all(&dir).expect("create version dir");
-        let payload = dir.join("jcode-linux-x86_64.bin");
+        let payload_name = format!("{}-linux-x86_64.bin", build::binary_stem());
+        let payload = dir.join(&payload_name);
         std::fs::write(&payload, format!("payload for {version}")).expect("write payload");
         std::fs::File::open(&payload)
             .expect("open payload")
@@ -1110,7 +1111,7 @@ mod newest_reload_candidate_integration_tests {
         let wrapper = dir.join(build::binary_name());
         std::fs::write(
             &wrapper,
-            "#!/usr/bin/env sh\nexec ./jcode-linux-x86_64.bin \"$@\"\n",
+            format!("#!/usr/bin/env sh\nexec ./{payload_name} \"$@\"\n"),
         )
         .expect("write wrapper");
         std::fs::File::open(&wrapper)

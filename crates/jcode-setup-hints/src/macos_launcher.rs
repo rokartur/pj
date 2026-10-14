@@ -74,7 +74,7 @@ pub(super) fn macos_notification_broker_dir() -> Result<PathBuf> {
 }
 
 fn macos_notification_broker_dir_in(home: &Path) -> PathBuf {
-    home.join(".jcode")
+    home.join(".pj")
         .join("notifications")
         .join("macos")
         .join(MACOS_NOTIFICATION_APP_NAME)

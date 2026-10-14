@@ -88,7 +88,7 @@ fn broker_lives_in_a_hidden_directory_outside_applications() {
     let dir = macos_notification_broker_dir_in(home);
     assert_eq!(
         dir,
-        Path::new("/Users/test/.jcode/notifications/macos/Jcode Notifications.app")
+        Path::new("/Users/test/.pj/notifications/macos/Jcode Notifications.app")
     );
     assert!(!dir.starts_with(home.join("Applications")));
 }

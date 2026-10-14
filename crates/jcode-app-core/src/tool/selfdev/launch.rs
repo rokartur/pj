@@ -167,7 +167,7 @@ impl SelfDevTool {
         if !launch.launched {
             let command_preview = launch
                 .command_preview()
-                .unwrap_or_else(|| format!("jcode --resume {} self-dev", launch.session_id));
+                .unwrap_or_else(|| format!("pj --resume {} self-dev", launch.session_id));
             return Ok(ToolOutput::new(format!(
                 "Created self-dev session {} but could not find a supported terminal to spawn automatically.\n\nRun manually:\n`{} --resume {} self-dev`",
                 launch.session_id,

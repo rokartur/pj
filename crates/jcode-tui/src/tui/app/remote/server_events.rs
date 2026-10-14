@@ -3079,13 +3079,13 @@ pub(in crate::tui::app) fn handle_server_event(
                 Ok(false) => {
                     if let Some(label) = split_label.as_deref() {
                         app.push_display_message(DisplayMessage::system(format!(
-                            "🔍 {} session {} created.\n\nNo terminal found. Resume manually:\n  jcode --resume {}",
+                            "🔍 {} session {} created.\n\nNo terminal found. Resume manually:\n  pj --resume {}",
                             label, new_session_name, new_session_id,
                         )));
                         app.set_status_notice(format!("{} session created", label));
                     } else {
                         app.push_display_message(DisplayMessage::system(format!(
-                            "✂ Split → {}\n\nNo terminal found. Resume manually:\n  jcode --resume {}",
+                            "✂ Split → {}\n\nNo terminal found. Resume manually:\n  pj --resume {}",
                             new_session_name, new_session_id,
                         )));
                     }
@@ -3093,13 +3093,13 @@ pub(in crate::tui::app) fn handle_server_event(
                 Err(e) => {
                     if let Some(label) = split_label.as_deref() {
                         app.push_display_message(DisplayMessage::error(format!(
-                            "{} session {} was created but failed to open a window: {}\n\nResume manually: jcode --resume {}",
+                            "{} session {} was created but failed to open a window: {}\n\nResume manually: pj --resume {}",
                             label, new_session_name, e, new_session_id,
                         )));
                         app.set_status_notice(format!("{} open failed", label));
                     } else {
                         app.push_display_message(DisplayMessage::error(format!(
-                            "Split created {} but failed to open window: {}\n\nResume manually: jcode --resume {}",
+                            "Split created {} but failed to open window: {}\n\nResume manually: pj --resume {}",
                             new_session_name, e, new_session_id,
                         )));
                     }

@@ -43,7 +43,7 @@ pub fn enrich_sessions_from_local_swarm_state(sessions: &mut [SessionInfo]) {
             .or_else(|| {
                 std::env::var_os("HOME")
                     .or_else(|| std::env::var_os("USERPROFILE"))
-                    .map(|home| std::path::PathBuf::from(home).join(".jcode"))
+                    .map(|home| std::path::PathBuf::from(home).join(".pj"))
             });
         let Some(home) = home else { return };
         home.join("state")

@@ -23,7 +23,7 @@ impl SpawnedWindowsServer {
         if release_binary.exists() {
             return release_binary;
         }
-        std::path::PathBuf::from(env!("CARGO_BIN_EXE_jcode"))
+        std::path::PathBuf::from(env!("CARGO_BIN_EXE_pj"))
     }
 
     fn spawn(prefix: &str) -> Result<Self> {

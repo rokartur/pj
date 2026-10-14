@@ -361,7 +361,7 @@ pub fn launch_instance(options: &LaunchOptions) -> Result<LaunchedInstance> {
 pub fn user_jcode_home() -> PathBuf {
     std::env::var_os("JCODE_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| home_dir().join(".jcode"))
+        .unwrap_or_else(|| home_dir().join(".pj"))
 }
 
 /// Share rotating login records with an instance and copy mutable config.

@@ -427,7 +427,7 @@ fn macos_notification_broker_app_path() -> Option<std::path::PathBuf> {
     // published it in ~/Applications; keep using that copy until the next
     // interactive launch migrates it.
     let current = home
-        .join(".jcode")
+        .join(".pj")
         .join("notifications")
         .join("macos")
         .join(MACOS_NOTIFICATION_BROKER_APP_NAME);
@@ -446,7 +446,7 @@ pub fn macos_notification_inbox_dir() -> Option<std::path::PathBuf> {
         return Some(path.into());
     }
     dirs::home_dir().map(|home| {
-        home.join(".jcode")
+        home.join(".pj")
             .join("notifications")
             .join("macos")
             .join("inbox")

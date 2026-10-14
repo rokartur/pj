@@ -49,7 +49,7 @@ impl MemoryLogger {
 }
 
 fn log_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".jcode").join("logs"))
+    dirs::home_dir().map(|h| h.join(".pj").join("logs"))
 }
 
 fn ensure_logger(date: &str) -> bool {

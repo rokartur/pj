@@ -51,7 +51,7 @@ fn jcode_dir() -> PathBuf {
     storage::jcode_dir().unwrap_or_else(|_| {
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(".jcode")
+            .join(".pj")
     })
 }
 

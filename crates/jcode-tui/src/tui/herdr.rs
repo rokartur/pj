@@ -315,7 +315,7 @@ fn resume_argv_for_session(
     session_id: &str,
     get: impl Fn(&str) -> Option<String>,
 ) -> Option<Vec<String>> {
-    let mut argv = vec!["jcode".to_string()];
+    let mut argv = vec!["pj".to_string()];
     if let Some(host) = get("JCODE_SSH_REMOTE").filter(|h| !h.trim().is_empty()) {
         argv.extend(["--ssh".to_string(), host]);
         for (flag, variable) in [
@@ -448,7 +448,7 @@ mod tests {
                 "--agent-session-id",
                 "session_fox_123",
                 "--",
-                "jcode",
+                "pj",
                 "--resume",
                 "session_fox_123"
             ]
@@ -510,7 +510,7 @@ mod tests {
         assert_eq!(
             resume_argv_for_session("session_a", |k| vars.get(k).map(|v| v.to_string())).unwrap(),
             [
-                "jcode",
+                "pj",
                 "--ssh",
                 "devbox",
                 "--remote-working-dir",
@@ -613,7 +613,7 @@ mod tests {
 
         let calls = herdr.calls();
         assert_eq!(calls.len(), 3, "{calls:?}");
-        assert!(calls[0].contains(" -- jcode --resume session_fox_1"));
+        assert!(calls[0].contains(" -- pj --resume session_fox_1"));
         assert!(!calls[1].contains(" -- "));
         assert!(calls[1].contains("--agent-session-id session_fox_1"));
         // Remembered: later reports skip the doomed first attempt.
@@ -630,6 +630,6 @@ mod tests {
 
         let calls = herdr.calls();
         assert_eq!(calls.len(), 1, "no state-only retry expected: {calls:?}");
-        assert!(calls[0].contains(" -- jcode --resume session_fox_1"));
+        assert!(calls[0].contains(" -- pj --resume session_fox_1"));
     }
 }

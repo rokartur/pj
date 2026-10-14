@@ -34,7 +34,7 @@ fn sessions_dir() -> Option<PathBuf> {
         .or_else(|| {
             std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
-                .map(|home| PathBuf::from(home).join(".jcode"))
+                .map(|home| PathBuf::from(home).join(".pj"))
         })?;
     Some(home.join("sessions"))
 }

@@ -99,7 +99,7 @@ fn sandboxed_jcode_home_is_detected_without_hiding_explicit_env_credentials() {
 #[test]
 fn real_jcode_home_is_not_treated_as_a_sandbox() {
     let _lock = crate::storage::lock_test_env();
-    let real_home = dirs::home_dir().unwrap().join(".jcode");
+    let real_home = dirs::home_dir().unwrap().join(".pj");
     let _home = EnvVarGuard::set("JCODE_HOME", &real_home);
 
     assert!(!crate::storage::running_with_sandboxed_home());

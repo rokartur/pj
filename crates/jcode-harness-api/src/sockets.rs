@@ -18,17 +18,17 @@ pub fn runtime_dir() -> PathBuf {
         return PathBuf::from(dir);
     }
     if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
-        return PathBuf::from(dir);
+        return PathBuf::from(dir).join("pj");
     }
     #[cfg(target_os = "macos")]
     if let Ok(dir) = std::env::var("TMPDIR") {
-        return PathBuf::from(dir);
+        return PathBuf::from(dir).join("pj");
     }
     fallback_runtime_dir()
 }
 
 fn fallback_runtime_dir() -> PathBuf {
-    std::env::temp_dir().join(format!("jcode-{}", runtime_user_discriminator()))
+    std::env::temp_dir().join(format!("pj-{}", runtime_user_discriminator()))
 }
 
 #[cfg(unix)]

@@ -102,7 +102,7 @@ name = "jcode"
 path = "src/lib.rs"
 
 [[bin]]
-name = "jcode"
+name = "pj"
 path = "src/main.rs"
 
 [[bin]]

@@ -25,7 +25,7 @@ fn exercise_stdio(close_daemon_first: bool) {
     let listener = UnixListener::bind(&socket).unwrap();
     listener.set_nonblocking(true).unwrap();
     let mut child = ChildGuard(
-        Command::new(env!("CARGO_BIN_EXE_jcode"))
+        Command::new(env!("CARGO_BIN_EXE_pj"))
             .current_dir(root.path())
             .env_clear()
             .env("HOME", root.path())

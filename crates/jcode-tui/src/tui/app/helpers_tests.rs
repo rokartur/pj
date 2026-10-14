@@ -337,7 +337,7 @@ fn pinned_resume_test_home() -> (
     let temp = tempfile::tempdir().expect("tempdir");
     let current = temp.path().join("builds").join("current");
     std::fs::create_dir_all(&current).expect("create builds/current");
-    std::fs::write(current.join("jcode"), b"#!/bin/sh\n").expect("write fake jcode binary");
+    std::fs::write(current.join("pj"), b"#!/bin/sh\n").expect("write fake pj binary");
     let home = EnvVarGuard::set_path("JCODE_HOME", temp.path());
     (env_lock, temp, home)
 }
@@ -355,7 +355,7 @@ fn build_resume_command_uses_imported_jcode_session_for_claude_code() {
 
     assert_eq!(
         program.file_name().and_then(|name| name.to_str()),
-        Some("jcode")
+        Some("pj")
     );
     assert_eq!(
         args,
@@ -382,7 +382,7 @@ fn build_resume_command_uses_imported_jcode_session_for_codex() {
 
     assert_eq!(
         program.file_name().and_then(|name| name.to_str()),
-        Some("jcode")
+        Some("pj")
     );
     assert_eq!(
         args,

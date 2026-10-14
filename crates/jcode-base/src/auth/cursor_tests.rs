@@ -2,11 +2,13 @@ use super::*;
 use tempfile::TempDir;
 
 #[test]
-fn config_file_path_under_jcode() {
+fn config_file_path_under_app_config_dir() {
+    let _env = crate::storage::lock_test_env();
     let path = config_file_path().unwrap();
-    let path_str = path.to_string_lossy();
-    assert!(path_str.contains("jcode"));
-    assert!(path_str.ends_with("cursor.env"));
+    assert_eq!(
+        path,
+        crate::storage::app_config_dir().unwrap().join("cursor.env")
+    );
 }
 
 #[test]

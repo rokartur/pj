@@ -53,7 +53,7 @@ fn store_path() -> Option<PathBuf> {
         let home = if let Ok(jcode_home) = std::env::var("JCODE_HOME") {
             PathBuf::from(jcode_home)
         } else {
-            dirs::home_dir()?.join(".jcode")
+            dirs::home_dir()?.join(".pj")
         };
         Some(home.join("schema-quirks.json"))
     }

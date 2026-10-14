@@ -1253,7 +1253,7 @@ pub(crate) fn run_cli(command: super::args::CloudCommand) -> Result<()> {
                     ),
                 };
                 println!(
-                    "Returned {} from `{}` ({} messages). Code: {merge}.\n  Resume: jcode --resume {}",
+                    "Returned {} from `{}` ({} messages). Code: {merge}.\n  Resume: pj --resume {}",
                     report.session_id, report.host, report.messages, report.session_id
                 );
             }
