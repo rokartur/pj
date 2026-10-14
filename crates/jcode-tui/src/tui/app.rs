@@ -105,6 +105,7 @@ mod state_ui_input_helpers;
 mod update_rehearsal;
 mod update_sim;
 mod usage_reset;
+mod usagefleet;
 mod voice_input;
 pub(crate) use state_ui_input_helpers::{registered_command_entries, registered_command_names};
 mod state_ui_maintenance;

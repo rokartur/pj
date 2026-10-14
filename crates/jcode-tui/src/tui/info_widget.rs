@@ -698,6 +698,8 @@ pub struct InfoWidgetData {
     pub usage_info: Option<UsageInfo>,
     /// Show consumed rather than remaining percentages in usage limits.
     pub usage_display_used: bool,
+    /// pj: usagefleet group budget of the active Claude account, e.g. "Artur: 5h 30% · 7d 17%".
+    pub usagefleet_line: Option<String>,
     /// Streaming output tokens per second (approximate)
     pub tokens_per_second: Option<f32>,
     /// Active provider name (openrouter/openai/anthropic/...)
@@ -2109,6 +2111,13 @@ fn render_sections(
         && info.available
     {
         lines.extend(render_usage_compact(info, data.usage_display_used));
+    }
+
+    if let Some(group) = &data.usagefleet_line {
+        lines.push(Line::from(Span::styled(
+            group.clone(),
+            Style::default().fg(rgb(140, 140, 150)),
+        )));
     }
 
     if let Some(cache) = data.cache_hit_info.as_ref() {

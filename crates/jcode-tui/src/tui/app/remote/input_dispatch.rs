@@ -138,6 +138,12 @@ pub(in crate::tui::app) async fn submit_prepared_remote_input(
         return Ok(());
     }
 
+    if let Some(reason) = app.usagefleet_block_message() {
+        restore_prepared_remote_input(app, prepared);
+        app.push_display_message(DisplayMessage::error(reason));
+        return Ok(());
+    }
+
     app.commit_pending_streaming_assistant_message();
     // A manually submitted prompt supersedes any armed post-error fallback
     // offer (and its staged resend): the user chose to continue differently.

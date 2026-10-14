@@ -212,7 +212,7 @@ pub(super) fn handle_bus_event(
             true
         }
         Ok(BusEvent::MermaidRenderCompleted) => true,
-        Ok(BusEvent::GitInfoRefreshed) => true,
+        Ok(BusEvent::GitInfoRefreshed | BusEvent::UsagefleetRefreshed) => true,
         Ok(BusEvent::UsageReport(results)) => {
             app.handle_usage_report(results);
             true

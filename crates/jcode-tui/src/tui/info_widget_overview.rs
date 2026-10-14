@@ -147,6 +147,7 @@ fn compact_overview_height(data: &InfoWidgetData) -> u16 {
         + compact_memory_height(data)
         + compact_background_height(data)
         + compact_usage_height(data)
+        + u16::from(data.usagefleet_line.is_some())
         + compact_kv_cache_height(data)
         + changes_section_height(data)
 }

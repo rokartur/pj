@@ -4113,6 +4113,13 @@ impl App {
         // Leaving the preview should happen as soon as the user acts on it.
         self.onboarding_preview_mode = false;
 
+        if let Some(reason) = self.usagefleet_block_message() {
+            self.input = input;
+            self.cursor_pos = self.input.len();
+            self.push_display_message(DisplayMessage::error(reason));
+            return;
+        }
+
         // Add the expanded user message to the transcript. The composer remains compact
         // while editing, but sent turns should show the actual pasted content.
         // Remember the typed prompt so we can restore it to the input box if this

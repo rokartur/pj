@@ -1914,6 +1914,7 @@ fn compact_page_height_estimate_matches_rendered_lines() {
             available: true,
             ..Default::default()
         }),
+        usagefleet_line: Some("Artur: 5h 70% · 7d 83%".to_string()),
         cache_hit_info: Some(CacheHitInfo {
             reported_input_tokens: 1_000,
             prompt_tokens: Some(1_000),
@@ -1929,6 +1930,15 @@ fn compact_page_height_estimate_matches_rendered_lines() {
     assert_eq!(layout.pages[0].kind, InfoPageKind::CompactOnly);
 
     let lines = super::render_page(InfoPageKind::CompactOnly, &data, inner);
+    let texts: Vec<String> = lines.iter().map(|line| line.to_string()).collect();
+    let weekly = texts.iter().position(|text| text.starts_with("7d "));
+    assert_eq!(
+        texts
+            .iter()
+            .position(|text| text == "Artur: 5h 70% · 7d 83%"),
+        weekly.map(|row| row + 1),
+        "group budget follows the account bars: {texts:?}"
+    );
     assert_eq!(
         lines.len() as u16,
         layout.pages[0].height,

@@ -393,6 +393,39 @@ impl App {
         }
     }
 
+    /// Why usagefleet refuses a prompt on the active Claude subscription, from the cached view.
+    pub(super) fn usagefleet_block_message(&self) -> Option<String> {
+        let route = self.widget_route_info(None);
+        if self.widget_auth_method(route) != crate::tui::info_widget::AuthMethod::AnthropicOAuth {
+            return None;
+        }
+        let view = super::usagefleet::group_view()?;
+        let resets_in = view
+            .blocked_until
+            .as_deref()
+            .map(crate::usage::format_reset_time);
+        pj_ext::usagefleet::block_message(&view, resets_in.as_deref())
+    }
+
+    fn usagefleet_line(
+        &self,
+        auth_method: crate::tui::info_widget::AuthMethod,
+        usage_info: Option<&crate::tui::info_widget::UsageInfo>,
+    ) -> Option<String> {
+        if auth_method != crate::tui::info_widget::AuthMethod::AnthropicOAuth {
+            return None;
+        }
+        let view = super::usagefleet::group_view()?;
+        let account_used_pct = usage_info.filter(|info| info.available).map(|info| {
+            (
+                f64::from(info.five_hour) * 100.0,
+                f64::from(info.seven_day) * 100.0,
+            )
+        });
+        let show_used = crate::config::config().display.usage_display_used();
+        pj_ext::usagefleet::group_line(&view, account_used_pct, show_used)
+    }
+
     fn widget_usage_info(
         &self,
         route: WidgetRouteInfo,
@@ -1556,6 +1589,7 @@ impl crate::tui::TuiState for App {
         let route = self.widget_route_info(model.as_deref());
         let auth_method = self.widget_auth_method(route);
         let usage_info = self.widget_usage_info(route, auth_method);
+        let usagefleet_line = self.usagefleet_line(auth_method, usage_info.as_ref());
 
         let tokens_per_second = if matches!(self.status, ProcessingStatus::Streaming) {
             self.compute_streaming_tps()
@@ -1668,6 +1702,7 @@ impl crate::tui::TuiState for App {
             background_info,
             usage_info,
             usage_display_used: crate::config::config().display.usage_display_used(),
+            usagefleet_line,
             tokens_per_second,
             provider_name: if uses_remote_widget_metadata {
                 self.remote_provider_name
