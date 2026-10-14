@@ -17,7 +17,7 @@ impl App {
                 "/fix\nRun recovery actions when the model cannot continue.\nRepairs missing tool outputs, resets provider session state, and starts compaction when possible."
             }
             "rewind" => {
-                "/rewind\nShow numbered conversation history.\n\n/rewind N\nRewind to message N (drops everything after it and resets provider session).\n\n/rewind undo\nUndo the most recent rewind and restore the removed messages.\n\n/rewind code\nAfter /rewind N, restore the files to how they were before the first removed message (git checkpoint; ignored files untouched)."
+                "/rewind\nShow numbered conversation history.\n\n/rewind N\nRewind to message N (drops everything after it and resets provider session). A user message N is removed too and moved back to the input for editing.\n\n/rewind undo\nUndo the most recent rewind and restore the removed messages.\n\n/rewind code\nAfter /rewind N, restore the files to how they were before the first removed message (git checkpoint; ignored files untouched)."
             }
             "worktree" => {
                 "/worktree\nList the git worktrees of this repo.\n\n/worktree N|branch|dir\nMove this session to that worktree (the client reloads into the same session). An unknown branch creates the worktree <main>-<branch>."

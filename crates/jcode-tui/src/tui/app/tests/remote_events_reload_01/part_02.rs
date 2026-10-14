@@ -354,13 +354,7 @@ fn test_remote_rewind_completion_shows_undo_hint_after_history_refresh() {
         crate::protocol::ServerEvent::History {
             id: 1,
             session_id: "session_rewind_remote".to_string(),
-            messages: vec![crate::protocol::HistoryMessage {
-                response_stats: None,
-                role: "user".to_string(),
-                content: "hello".to_string(),
-                tool_calls: None,
-                tool_data: None,
-            }],
+            messages: vec![],
             images: vec![],
             provider_name: Some("mock".to_string()),
             provider_model: Some("mock-model".to_string()),
@@ -401,8 +395,10 @@ fn test_remote_rewind_completion_shows_undo_hint_after_history_refresh() {
         .display_messages()
         .last()
         .expect("rewind completion notice");
-    assert!(last.content.contains("✓ Rewound to message 1"));
+    assert!(last.content.contains("✓ Rewound to message 1. Removed 2 messages."));
     assert!(last.content.contains("Undo anytime with /rewind undo"));
+    assert_eq!(app.input(), "hello");
+    assert_eq!(app.cursor_pos(), "hello".len());
 }
 
 #[test]

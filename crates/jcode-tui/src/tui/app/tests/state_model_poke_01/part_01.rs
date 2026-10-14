@@ -83,12 +83,10 @@ fn test_rewind_truncates_provider_messages() {
     app.input = "/rewind 2".to_string();
     app.submit_input();
 
-    assert_eq!(app.messages.len(), 2);
-    assert_eq!(app.session.messages.len(), 2);
-    assert!(matches!(
-        &app.messages[1].content[0],
-        ContentBlock::Text { text, .. } if text == "msg-2"
-    ));
+    assert_eq!(app.messages.len(), 1);
+    assert_eq!(app.session.messages.len(), 1);
+    assert_eq!(app.input(), "msg-2");
+    assert_eq!(app.cursor_pos(), "msg-2".len());
     assert!(app.provider_session_id.is_none());
     assert!(app.session.provider_session_id.is_none());
 }
@@ -112,7 +110,7 @@ fn test_rewind_undo_restores_truncated_messages() {
     app.provider_session_id = Some("provider-session".to_string());
     app.session.provider_session_id = Some("provider-session".to_string());
 
-    app.input = "/rewind 1".to_string();
+    app.input = "/rewind 2".to_string();
     app.submit_input();
     assert_eq!(app.session.visible_conversation_message_count(), 1);
     assert!(
