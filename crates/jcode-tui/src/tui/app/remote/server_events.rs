@@ -1198,6 +1198,7 @@ pub(in crate::tui::app) fn handle_server_event(
                     return true;
                 }
                 app.deferred_stream_done_id = None;
+                app.pending_question = None;
                 let turn_duration_secs = app.display_turn_duration_secs();
                 app.remember_terminal_title_work();
                 if completes_resumed_turn {
@@ -3131,6 +3132,15 @@ pub(in crate::tui::app) fn handle_server_event(
                 app.set_status_notice(format!("Resuming {} sessions", resumed));
             }
             false
+        }
+        ServerEvent::StdinRequest {
+            request_id, prompt, ..
+        } if request_id.starts_with(pj_ext::ask::REQUEST_PREFIX) => {
+            app.notify_needs_attention("question", &prompt);
+            app.push_display_message(DisplayMessage::system(prompt));
+            app.pending_question = Some(request_id);
+            app.set_status_notice("Answer the question: type it and press Enter");
+            true
         }
         ServerEvent::StdinRequest { .. } => {
             app.set_status_notice("⌨ Interactive terminal detected (command will timeout)");

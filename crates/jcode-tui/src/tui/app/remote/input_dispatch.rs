@@ -433,12 +433,13 @@ async fn submit_remote_transcript_input(
             let prepared = input::take_prepared_input(app);
             app.push_display_message(DisplayMessage {
                 role: "user".to_string(),
-                content: prepared.raw_input,
+                content: prepared.raw_input.clone(),
                 tool_calls: vec![],
                 duration_secs: None,
                 title: None,
                 tool_data: None,
             });
+            super::checkpoints::save_before_send(app, prepared.raw_input).await;
             app.begin_remote_send(remote, prepared.expanded, prepared.images, false)
                 .await?;
         }

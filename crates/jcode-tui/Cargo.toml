@@ -18,6 +18,7 @@ name = "jcode_tui"
 path = "src/lib.rs"
 
 [dependencies]
+pj-ext = { path = "../pj-ext" }
 # Application core (server, agent, provider, auth, session, tool, config, ...).
 # Re-exported via `pub use jcode_app_core::*` in lib.rs. default-features=false
 # so this crate (and ultimately the root crate) controls app-core's features.

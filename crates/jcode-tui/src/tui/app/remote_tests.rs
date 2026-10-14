@@ -1465,3 +1465,41 @@ fn history_restore_renders_swarm_deliveries_as_one_row() {
         assert_eq!(lines.len(), 1, "{message:?}");
     }
 }
+#[test]
+fn ask_user_question_request_is_answered_by_the_next_enter() {
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut app = create_test_app();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    handle_server_event(
+        &mut app,
+        ServerEvent::StdinRequest {
+            request_id: format!("{}call:0", pj_ext::ask::REQUEST_PREFIX),
+            prompt: "[Runtime] Which?\n  1. Bun: fast".to_string(),
+            is_password: false,
+            tool_call_id: String::new(),
+        },
+        &mut remote,
+    );
+    assert!(app.pending_question.is_some());
+    assert!(
+        app.display_messages()
+            .iter()
+            .any(|m| m.content.contains("1. Bun"))
+    );
+
+    app.input = "1".to_string();
+    app.cursor_pos = 1;
+    rt.block_on(super::key_handling::submit_remote_enter_input(
+        &mut app,
+        &mut remote,
+    ))
+    .expect("answer sent");
+    assert!(app.pending_question.is_none());
+    assert_eq!(
+        app.display_messages().last().map(|m| m.content.as_str()),
+        Some("Answer: 1")
+    );
+    assert!(!app.is_processing, "the answer must not start a new turn");
+}

@@ -16,6 +16,7 @@ use crossterm::event::{
 use ratatui::{DefaultTerminal, Terminal, backend::Backend};
 use std::time::{Duration, Instant};
 
+pub(in crate::tui::app) mod checkpoints;
 mod input_dispatch;
 mod key_handling;
 mod queue_recovery;
@@ -26,6 +27,7 @@ mod session_persistence;
 mod swarm_plan_core;
 mod swarm_status_core;
 mod workspace;
+mod worktree_command;
 
 #[cfg(test)]
 pub(super) use key_handling::reload_stale_remote_server_before_update;

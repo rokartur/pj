@@ -1300,6 +1300,10 @@ pub struct App {
     runtime_mode: AppRuntimeMode,
     // Remote rewind/undo request waiting for the server's replacement History payload.
     pending_remote_rewind_notice: Option<PendingRemoteRewindNotice>,
+    // pj: code checkpoint the last /rewind offered to restore with /rewind code.
+    code_restore: Option<remote::checkpoints::CodeRestore>,
+    // pj: stdin request id of the ask_user_question waiting for the next Enter.
+    pending_question: Option<String>,
     // History-recovery watchdog for the "stuck on loading session…" bug. When a
     // remote (re)connect never receives the bootstrap `History` event, every
     // prompt path is gated behind `has_loaded_history()` and the session is

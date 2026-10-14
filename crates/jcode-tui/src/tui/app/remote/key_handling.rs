@@ -144,7 +144,7 @@ async fn apply_remote_effort_direction(
     Ok(())
 }
 
-fn remote_rewindable_messages(app: &App) -> Vec<&DisplayMessage> {
+pub(super) fn remote_rewindable_messages(app: &App) -> Vec<&DisplayMessage> {
     app.display_messages()
         .iter()
         .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
@@ -185,8 +185,14 @@ async fn handle_remote_rewind_command(
         return Ok(true);
     }
 
+    if trimmed == "/rewind code" {
+        super::checkpoints::restore_code(app).await;
+        return Ok(true);
+    }
+
     if trimmed == "/rewind undo" {
         remote.rewind_undo().await?;
+        app.code_restore = None;
         app.pending_remote_rewind_notice = Some(PendingRemoteRewindNotice {
             undo: true,
             message_index: None,
@@ -210,6 +216,7 @@ async fn handle_remote_rewind_command(
 
     match num_str.trim().parse::<usize>() {
         Ok(n) if n > 0 && n <= message_count => {
+            super::checkpoints::offer_restore(app, n).await;
             remote.rewind(n).await?;
             app.pending_remote_rewind_notice = Some(PendingRemoteRewindNotice {
                 undo: false,
@@ -1137,6 +1144,16 @@ pub(in crate::tui::app) async fn submit_remote_enter_input(
         let prepared = input::take_prepared_input(app);
         let trimmed = prepared.expanded.trim();
 
+        if !trimmed.starts_with('/')
+            && let Some(request_id) = app.pending_question.take()
+        {
+            remote.send_stdin_response(&request_id, trimmed).await?;
+            // Not a user message: the server transcript has it as a tool result, and
+            // /rewind numbers user and assistant messages only.
+            app.push_display_message(DisplayMessage::system(format!("Answer: {trimmed}")));
+            return Ok(());
+        }
+
         // Before the SSH gate: `/local` must work from a client attached
         // to the cloud copy, because the return is coordinated locally.
         if app_mod::commands_cloud::parse_cloud_command(trimmed).is_some() {
@@ -1225,6 +1242,10 @@ pub(in crate::tui::app) async fn submit_remote_enter_input(
             return Ok(());
         }
 
+        if trimmed == "/worktree" || trimmed.starts_with("/worktree ") {
+            super::worktree_command::handle(app, trimmed["/worktree".len()..].trim());
+            return Ok(());
+        }
         if trimmed == "/server-reload" {
             app.append_reload_message("Reloading server...");
             remote.reload().await?;
