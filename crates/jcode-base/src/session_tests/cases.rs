@@ -2709,6 +2709,36 @@ fn test_rewind_after_undo_uses_the_new_target_not_the_previous_one() {
 }
 
 #[test]
+fn test_rewind_cut_returns_a_user_target_to_the_prompt_and_keeps_an_assistant_target() {
+    let mut session = Session::create_with_id("rewind-cut".into(), None, None);
+    for (role, text) in [
+        (Role::User, "prompt-1"),
+        (Role::Assistant, "answer-1"),
+        (Role::User, "prompt-2"),
+        (Role::Assistant, "answer-2"),
+    ] {
+        session.add_message(
+            role,
+            vec![ContentBlock::Text {
+                text: text.into(),
+                cache_control: None,
+            }],
+        );
+    }
+
+    let user_cut = session.rewind_cut(3).expect("target 3 exists");
+    assert_eq!(user_cut.stored_len, 2);
+    assert_eq!(user_cut.returned_prompt.as_deref(), Some("prompt-2"));
+
+    let assistant_cut = session.rewind_cut(2).expect("target 2 exists");
+    assert_eq!(assistant_cut.stored_len, 2);
+    assert_eq!(assistant_cut.returned_prompt, None);
+
+    assert!(session.rewind_cut(0).is_none());
+    assert!(session.rewind_cut(5).is_none());
+}
+
+#[test]
 fn restored_tool_image_boundaries_follow_returned_history_rows() {
     let mut session = Session::create_with_id("image-boundaries".into(), None, None);
     let text = |text: &str| ContentBlock::Text {

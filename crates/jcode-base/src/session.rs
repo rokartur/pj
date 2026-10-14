@@ -354,6 +354,11 @@ pub fn derive_session_provider_key(provider_name: &str) -> Option<String> {
     Some(fallback.to_string())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RewindCut {
+    pub stored_len: usize,
+    pub returned_prompt: Option<String>,
+}
 impl Session {
     fn session_from_startup_stub(stub: SessionStartupStub) -> Self {
         let mut session = Self::create_with_id(stub.id, stub.parent_id, stub.title);
@@ -1505,6 +1510,27 @@ request in this new forked session, using the inherited conversation only as con
             .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
             .filter_map(|message| message.stored_index)
             .collect()
+    }
+
+    /// Where `/rewind N` cuts the stored history. A user target is removed
+    /// too and its text returned so the caller can put it back in the input;
+    /// an assistant target is kept. `None` when N is out of range.
+    pub fn rewind_cut(&self, target: usize) -> Option<RewindCut> {
+        let rendered = render_messages(self)
+            .into_iter()
+            .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
+            .nth(target.checked_sub(1)?)?;
+        let stored_index = rendered.stored_index?;
+        if rendered.role == "user" {
+            return Some(RewindCut {
+                stored_len: stored_index,
+                returned_prompt: Some(rendered.content),
+            });
+        }
+        Some(RewindCut {
+            stored_len: stored_index + 1,
+            returned_prompt: None,
+        })
     }
 
     /// Number of `/rewind` targets (see [`Self::rewind_target_stored_indices`]).

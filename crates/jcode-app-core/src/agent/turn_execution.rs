@@ -322,6 +322,8 @@ impl Agent {
     }
 
     /// Rewind the conversation to a 1-based visible transcript message index.
+    /// Rewinding to a user message removes that message as well, so the
+    /// client can return it to the input box for editing.
     ///
     /// The index is interpreted against the same rendered transcript the TUI
     /// numbers in `/rewind` (user/assistant entries only, tool cards and
@@ -333,24 +335,21 @@ impl Agent {
     /// truncated context from scratch instead of continuing from a stale upstream
     /// conversation.
     pub fn rewind_to_message(&mut self, message_index: usize) -> Result<usize, String> {
-        let targets = self.session.rewind_target_stored_indices();
-        let message_count = targets.len();
-        if message_index == 0 || message_index > message_count {
+        let message_count = self.session.rewind_target_count();
+        let Some(cut) = self.session.rewind_cut(message_index) else {
             return Err(format!(
                 "Invalid message number: {}. Valid range: 1-{}",
                 message_index, message_count
             ));
-        }
-        let stored_len = targets[message_index - 1] + 1;
+        };
 
-        let removed = message_count - message_index;
         self.rewind_undo_snapshot = Some(RewindUndoSnapshot {
             messages: self.session.messages.clone(),
             provider_session_id: self.provider_session_id.clone(),
             session_provider_session_id: self.session.provider_session_id.clone(),
             visible_message_count: message_count,
         });
-        self.session.truncate_messages(stored_len);
+        self.session.truncate_messages(cut.stored_len);
         self.session.updated_at = chrono::Utc::now();
         self.provider_session_id = None;
         self.session.provider_session_id = None;
@@ -359,6 +358,7 @@ impl Agent {
         self.locked_tools = None;
         self.reset_tool_output_tracking();
         self.persist_session_best_effort("conversation rewind");
+        let removed = message_count - self.session.rewind_target_count();
         Ok(removed)
     }
 
