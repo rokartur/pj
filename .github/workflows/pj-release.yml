@@ -1,0 +1,48 @@
+name: pj release
+
+# release.yml publishes upstream jcode and stays gated to 1jehuang/jcode.
+# No JCODE_RELEASE_BUILD here: a release build auto-updates from 1jehuang/jcode and would replace pj.
+
+on:
+  push:
+    tags:
+      - 'pj-v*'
+
+env:
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    if: github.repository == 'rokartur/pj'
+    # Ubuntu 22.04: glibc 2.35 and libssl3, so the binary runs on Debian bookworm.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --locked --release --bin pj
+
+      - name: Package
+        run: |
+          ./target/release/pj --version
+          mkdir -p dist
+          cp target/release/pj dist/pj
+          tar -C dist -czf dist/pj-linux-x86_64.tar.gz pj
+          cd dist && sha256sum pj-linux-x86_64.tar.gz > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/pj-linux-x86_64.tar.gz dist/SHA256SUMS --title "$GITHUB_REF_NAME" --generate-notes
