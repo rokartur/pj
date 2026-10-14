@@ -185,6 +185,9 @@ emoji = false
 # Usage percentage wording: "left" (default) or "used".
 usage_display = "left"
 
+# Account name in the Overview quota row: "label" (default, e.g. claude-fox) or "email".
+account_name = "label"
+
 # Show thinking/reasoning content (default: true)
 show_thinking = true
 
