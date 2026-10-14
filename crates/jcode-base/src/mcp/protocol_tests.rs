@@ -49,6 +49,37 @@ fn issue_790_load_uses_process_cwd_while_unbound_load_for_dir_does_not() {
 }
 
 #[test]
+fn agents_dir_mcp_json_is_loaded_for_project_and_global() {
+    let _guard = crate::storage::lock_test_env();
+    let previous_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::tempdir().expect("home tempdir");
+    let project = tempfile::tempdir().expect("project tempdir");
+    crate::env::set_var("JCODE_HOME", home.path());
+    let global_agents = home.path().join("external/.agents");
+    std::fs::create_dir_all(&global_agents).unwrap();
+    std::fs::write(
+        global_agents.join("mcp.json"),
+        r#"{"mcpServers":{"global-agents":{"command":"global-bin"}}}"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(project.path().join(".agents")).unwrap();
+    std::fs::write(
+        project.path().join(".agents/mcp.json"),
+        r#"{"mcpServers":{"project-agents":{"command":"project-bin"}}}"#,
+    )
+    .unwrap();
+
+    let config = McpConfig::load_for_dir(Some(project.path()));
+
+    match previous_home {
+        Some(previous_home) => crate::env::set_var("JCODE_HOME", previous_home),
+        None => crate::env::remove_var("JCODE_HOME"),
+    }
+    assert_eq!(config.servers["global-agents"].command, "global-bin");
+    assert_eq!(config.servers["project-agents"].command, "project-bin");
+}
+
+#[test]
 fn test_json_rpc_request_serialization() {
     let request = JsonRpcRequest::new(1, "tools/list", None);
     let json = serde_json::to_string(&request).unwrap();

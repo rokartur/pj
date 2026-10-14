@@ -5,7 +5,7 @@ HTTP+SSE servers. Existing stdio configurations continue to work.
 
 ## Configuration
 
-Add remote servers to `~/.jcode/mcp.json` or a project `.mcp.json`:
+Add remote servers to `~/.agents/mcp.json` or a project `.agents/mcp.json` (`~/.jcode/mcp.json` and `.mcp.json` also work):
 
 ```json
 {

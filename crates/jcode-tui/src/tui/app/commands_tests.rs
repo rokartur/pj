@@ -55,24 +55,35 @@ fn parse_manual_subagent_spec_rejects_missing_prompt() {
 }
 
 #[test]
-fn swarm_prompt_edit_path_prefers_nonblank_project_override() {
+fn swarm_prompt_edit_path_prefers_nonblank_project_agents_override() {
     let project = tempfile::tempdir().expect("project tempdir");
+    let agents_home = tempfile::tempdir().expect("agents tempdir");
     let jcode_home = tempfile::tempdir().expect("jcode tempdir");
-    let project_prompt = project.path().join(".jcode/swarm-prompt.md");
-    std::fs::create_dir_all(project_prompt.parent().expect("prompt parent"))
-        .expect("create project config dir");
+    let project_prompt = project.path().join(".agents/swarm-prompt.md");
+    std::fs::create_dir_all(project.path().join(".agents")).expect("create .agents");
+    std::fs::create_dir_all(project.path().join(".jcode")).expect("create .jcode");
     std::fs::write(&project_prompt, "project routing").expect("write project prompt");
-    std::fs::write(jcode_home.path().join("swarm-prompt.md"), "global routing")
+    std::fs::write(
+        project.path().join(".jcode/swarm-prompt.md"),
+        "jcode project routing",
+    )
+    .expect("write jcode project prompt");
+    std::fs::write(agents_home.path().join("swarm-prompt.md"), "global routing")
         .expect("write global prompt");
 
-    let path = ensure_swarm_prompt_edit_path(project.path().to_str(), jcode_home.path())
-        .expect("resolve prompt path");
+    let path = ensure_swarm_prompt_edit_path(
+        project.path().to_str(),
+        agents_home.path(),
+        jcode_home.path(),
+    )
+    .expect("resolve prompt path");
     assert_eq!(path, project_prompt);
 }
 
 #[test]
-fn swarm_prompt_edit_path_falls_back_to_nonblank_global_override() {
+fn swarm_prompt_edit_path_falls_back_to_nonblank_jcode_home_override() {
     let project = tempfile::tempdir().expect("project tempdir");
+    let agents_home = tempfile::tempdir().expect("agents tempdir");
     let jcode_home = tempfile::tempdir().expect("jcode tempdir");
     let project_prompt = project.path().join(".jcode/swarm-prompt.md");
     std::fs::create_dir_all(project_prompt.parent().expect("prompt parent"))
@@ -81,19 +92,28 @@ fn swarm_prompt_edit_path_falls_back_to_nonblank_global_override() {
     let global_prompt = jcode_home.path().join("swarm-prompt.md");
     std::fs::write(&global_prompt, "global routing").expect("write global prompt");
 
-    let path = ensure_swarm_prompt_edit_path(project.path().to_str(), jcode_home.path())
-        .expect("resolve prompt path");
+    let path = ensure_swarm_prompt_edit_path(
+        project.path().to_str(),
+        agents_home.path(),
+        jcode_home.path(),
+    )
+    .expect("resolve prompt path");
     assert_eq!(path, global_prompt);
 }
 
 #[test]
-fn swarm_prompt_edit_path_materializes_builtin_default_globally() {
+fn swarm_prompt_edit_path_materializes_builtin_default_in_agents_home() {
     let project = tempfile::tempdir().expect("project tempdir");
+    let agents_home = tempfile::tempdir().expect("agents tempdir");
     let jcode_home = tempfile::tempdir().expect("jcode tempdir");
 
-    let path = ensure_swarm_prompt_edit_path(project.path().to_str(), jcode_home.path())
-        .expect("create editable prompt");
-    assert_eq!(path, jcode_home.path().join("swarm-prompt.md"));
+    let path = ensure_swarm_prompt_edit_path(
+        project.path().to_str(),
+        agents_home.path(),
+        jcode_home.path(),
+    )
+    .expect("create editable prompt");
+    assert_eq!(path, agents_home.path().join("swarm-prompt.md"));
     let content = std::fs::read_to_string(path).expect("read created prompt");
     assert_eq!(content.trim(), crate::prompt::DEFAULT_SWARM_PROMPT.trim());
 }

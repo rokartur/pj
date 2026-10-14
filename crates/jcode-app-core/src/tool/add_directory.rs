@@ -12,7 +12,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::Path;
 
-const INSTRUCTION_FILES: [&str; 4] = ["AGENTS.md", "CLAUDE.md", ".pi/AGENTS.md", ".pi/CLAUDE.md"];
+const INSTRUCTION_FILES: [&str; 5] = [
+    ".agents/AGENTS.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".pi/AGENTS.md",
+    ".pi/CLAUDE.md",
+];
 
 pub struct AddDirectoryTool;
 

@@ -6,29 +6,55 @@ use std::process::Command;
 /// Default system prompt for jcode (embedded at compile time)
 pub const DEFAULT_SYSTEM_PROMPT: &str = include_str!("prompt/system_prompt.md");
 
-/// Load the base system prompt, allowing the user to fully replace the built-in
-/// [`DEFAULT_SYSTEM_PROMPT`]. Precedence: project `./.jcode/system-prompt.md`,
-/// then global `~/.jcode/system-prompt.md`, then the built-in default.
-///
-/// This is a *replacement* hook. To merely add guidance on top of the default,
-/// use `.jcode/prompt-overlay.md` instead.
-pub fn load_base_system_prompt(working_dir: Option<&Path>) -> String {
+/// pj: project config lives in the cross-tool `.agents/` dir; `.jcode/` is the
+/// fallback. Returns the path and its label for prompt section headings.
+fn project_config_file(project_dir: &Path, name: &str) -> (PathBuf, String) {
+    let agents = project_dir.join(".agents").join(name);
+    if agents.exists() {
+        return (agents, format!(".agents/{name}"));
+    }
+    (project_dir.join(".jcode").join(name), format!(".jcode/{name}"))
+}
+
+/// Global counterpart of [`project_config_file`]: `~/.agents/`, then the jcode home.
+fn global_config_file(name: &str) -> Option<(PathBuf, String)> {
+    if let Ok(agents) = crate::storage::user_home_path(".agents").map(|dir| dir.join(name))
+        && agents.exists()
+    {
+        return Some((agents, format!("~/.agents/{name}")));
+    }
+    crate::storage::jcode_dir()
+        .ok()
+        .map(|dir| (dir.join(name), format!("~/.jcode/{name}")))
+}
+
+/// First non-blank of the project then global config file `name`.
+fn load_first_config_file(working_dir: Option<&Path>, name: &str) -> Option<String> {
     let project_dir = working_dir.unwrap_or(Path::new("."));
     let candidates = [
-        Some(project_dir.join(".jcode").join("system-prompt.md")),
-        crate::storage::jcode_dir()
-            .ok()
-            .map(|dir| dir.join("system-prompt.md")),
+        Some(project_config_file(project_dir, name)),
+        global_config_file(name),
     ];
-    for path in candidates.into_iter().flatten() {
+    for (path, _) in candidates.into_iter().flatten() {
         if let Ok(content) = std::fs::read_to_string(&path) {
             let trimmed = content.trim();
             if !trimmed.is_empty() {
-                return trimmed.to_string();
+                return Some(trimmed.to_string());
             }
         }
     }
-    DEFAULT_SYSTEM_PROMPT.to_string()
+    None
+}
+
+/// Load the base system prompt, allowing the user to fully replace the built-in
+/// [`DEFAULT_SYSTEM_PROMPT`]. Precedence: project `system-prompt.md`, then
+/// global, then the built-in default (see [`project_config_file`]).
+///
+/// This is a *replacement* hook. To merely add guidance on top of the default,
+/// use `prompt-overlay.md` instead.
+pub fn load_base_system_prompt(working_dir: Option<&Path>) -> String {
+    load_first_config_file(working_dir, "system-prompt.md")
+        .unwrap_or_else(|| DEFAULT_SYSTEM_PROMPT.to_string())
 }
 
 /// Prompt guidance for the optional Mermaid rendering capability.
@@ -66,31 +92,15 @@ fn base_system_prompt_parts(
 }
 
 /// Built-in default swarm prompt: model-routing guidance for spawned swarm
-/// agents (which model/effort to pick per task kind). Users can override it by
-/// creating `~/.jcode/swarm-prompt.md` (global) or `./.jcode/swarm-prompt.md`
-/// (project). See [`load_swarm_prompt`].
+/// agents (which model/effort to pick per task kind). Users can override it with
+/// a `swarm-prompt.md` config file. See [`load_swarm_prompt`].
 pub const DEFAULT_SWARM_PROMPT: &str = include_str!("prompt/swarm_prompt.md");
 
 /// Load the swarm prompt used to steer swarm model routing. Precedence:
-/// project `./.jcode/swarm-prompt.md`, then global `~/.jcode/swarm-prompt.md`,
-/// then the built-in [`DEFAULT_SWARM_PROMPT`].
+/// project `swarm-prompt.md`, then global, then the built-in [`DEFAULT_SWARM_PROMPT`].
 pub fn load_swarm_prompt(working_dir: Option<&Path>) -> String {
-    let project_dir = working_dir.unwrap_or(Path::new("."));
-    let candidates = [
-        Some(project_dir.join(".jcode").join("swarm-prompt.md")),
-        crate::storage::jcode_dir()
-            .ok()
-            .map(|dir| dir.join("swarm-prompt.md")),
-    ];
-    for path in candidates.into_iter().flatten() {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            let trimmed = content.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-    }
-    DEFAULT_SWARM_PROMPT.trim().to_string()
+    load_first_config_file(working_dir, "swarm-prompt.md")
+        .unwrap_or_else(|| DEFAULT_SWARM_PROMPT.trim().to_string())
 }
 
 /// Reasoning-effort sentinel that enables swarm orchestration. Providers
@@ -947,6 +957,10 @@ fn same_canonical_path(first: &Path, second: &Path) -> bool {
     }
 }
 
+/// Project instruction files, base first: `.agents/AGENTS.md` (agentsstandard.com
+/// project base), then the repo-root `AGENTS.md`.
+const PROJECT_AGENTS_MD_FILES: [&str; 2] = [".agents/AGENTS.md", "AGENTS.md"];
+
 fn load_agents_md_files_from_dirs(
     project_dir: &Path,
     global_agents_md: Option<&Path>,
@@ -954,37 +968,26 @@ fn load_agents_md_files_from_dirs(
     let mut contents = vec![];
     let mut info = ContextInfo::default();
 
-    // Helper to load a file if it exists, returns (formatted_content, raw_size)
     let load_file = |path: &Path, label: &str| -> Option<(String, usize)> {
-        if path.exists() {
-            std::fs::read_to_string(path).ok().map(|content| {
-                let raw_size = content.len();
-                let formatted = format!("# {}\n\n{}", label, content.trim());
-                (formatted, raw_size)
-            })
-        } else {
-            None
-        }
+        let content = std::fs::read_to_string(path).ok()?;
+        Some((format!("# {label}\n\n{}", content.trim()), content.len()))
     };
 
-    let project_agents_md = project_dir.join("AGENTS.md");
-    if let Some((content, size)) = load_file(&project_agents_md, "Project Instructions (AGENTS.md)")
-    {
-        info.has_project_agents_md = true;
-        info.project_agents_md_chars = size;
-        contents.push(content);
+    let project_paths = PROJECT_AGENTS_MD_FILES.map(|name| project_dir.join(name));
+    for (path, name) in project_paths.iter().zip(PROJECT_AGENTS_MD_FILES) {
+        if let Some((content, size)) = load_file(path, &format!("Project Instructions ({name})")) {
+            info.has_project_agents_md = true;
+            info.project_agents_md_chars += size;
+            contents.push(content);
+        }
     }
 
     // Canonical file identity handles cwd=$HOME as well as symlinked aliases.
-    // If either file is absent or cannot be resolved, loading below remains the
-    // source of truth and simply skips unreadable files.
-    let global_duplicates_project = global_agents_md
-        .is_some_and(|global_agents_md| same_canonical_path(&project_agents_md, global_agents_md));
-
-    if !global_duplicates_project
-        && let Some(global_agents_md) = global_agents_md
-        && let Some((content, size)) =
-            load_file(global_agents_md, "Global Instructions (~/AGENTS.md)")
+    if let Some(global_path) = global_agents_md
+        && !project_paths
+            .iter()
+            .any(|project_path| same_canonical_path(project_path, global_path))
+        && let Some((content, size)) = load_file(global_path, global_agents_md_label(global_path))
     {
         info.has_global_agents_md = true;
         info.global_agents_md_chars = size;
@@ -998,92 +1001,61 @@ fn load_agents_md_files_from_dirs(
     }
 }
 
-/// Load AGENTS.md files from a specific working directory.
+fn global_agents_md_label(path: &Path) -> &'static str {
+    if path.parent().and_then(Path::file_name) == Some(".agents".as_ref()) {
+        "Global Instructions (~/.agents/AGENTS.md)"
+    } else {
+        "Global Instructions (~/AGENTS.md)"
+    }
+}
+
+/// Load AGENTS.md files from a specific working directory. The global file is
+/// `~/.agents/AGENTS.md`, falling back to `~/AGENTS.md`.
 pub fn load_agents_md_files_from_dir(working_dir: Option<&Path>) -> (Option<String>, ContextInfo) {
     let project_dir = working_dir.unwrap_or(Path::new("."));
-    let global_agents_md = crate::storage::user_home_path("AGENTS.md").ok();
+    let global_agents_md = [".agents/AGENTS.md", "AGENTS.md"]
+        .into_iter()
+        .filter_map(|relative| crate::storage::user_home_path(relative).ok())
+        .find(|path| path.exists());
     load_agents_md_files_from_dirs(project_dir, global_agents_md.as_deref())
 }
 
-/// Load optional prompt overlay markdown from ~/.jcode/ and ./.jcode/
 fn load_prompt_overlay_files_from_dir(working_dir: Option<&Path>) -> (Option<String>, usize) {
+    load_guidance_files(working_dir, "prompt-overlay.md", "Prompt Overlay")
+}
+
+fn load_preferred_tools_files_from_dir(working_dir: Option<&Path>) -> (Option<String>, usize) {
+    load_guidance_files(working_dir, "preferred-tools.md", "Preferred Tools")
+}
+
+/// Load the project and global copies of an additive guidance file, each under
+/// its own heading. A global path aliasing the project file is loaded once.
+fn load_guidance_files(
+    working_dir: Option<&Path>,
+    name: &str,
+    title: &str,
+) -> (Option<String>, usize) {
     let mut contents = vec![];
     let mut total_chars = 0usize;
 
     let load_file = |path: &Path, label: &str| -> Option<(String, usize)> {
-        if path.exists() {
-            std::fs::read_to_string(path).ok().map(|content| {
-                let raw_size = content.len();
-                let formatted = format!("# {}\n\n{}", label, content.trim());
-                (formatted, raw_size)
-            })
-        } else {
-            None
-        }
+        let content = std::fs::read_to_string(path).ok()?;
+        Some((format!("# {label}\n\n{}", content.trim()), content.len()))
     };
 
     let project_dir = working_dir.unwrap_or(Path::new("."));
-    let project_overlay = project_dir.join(".jcode").join("prompt-overlay.md");
-    if let Some((content, size)) = load_file(
-        &project_overlay,
-        "Project Prompt Overlay (.jcode/prompt-overlay.md)",
-    ) {
-        total_chars += size;
-        contents.push(content);
-    }
-
-    if let Ok(global_overlay) = crate::storage::jcode_dir().map(|dir| dir.join("prompt-overlay.md"))
-        && !same_canonical_path(&project_overlay, &global_overlay)
-        && let Some((content, size)) = load_file(
-            &global_overlay,
-            "Global Prompt Overlay (~/.jcode/prompt-overlay.md)",
-        )
+    let (project_path, project_label) = project_config_file(project_dir, name);
+    if let Some((content, size)) =
+        load_file(&project_path, &format!("Project {title} ({project_label})"))
     {
         total_chars += size;
         contents.push(content);
     }
 
-    if contents.is_empty() {
-        (None, 0)
-    } else {
-        (Some(contents.join("\n\n")), total_chars)
-    }
-}
-
-/// Load optional preferred-tool guidance from ~/.jcode/ and ./.jcode/
-fn load_preferred_tools_files_from_dir(working_dir: Option<&Path>) -> (Option<String>, usize) {
-    let mut contents = vec![];
-    let mut total_chars = 0usize;
-
-    let load_file = |path: &Path, label: &str| -> Option<(String, usize)> {
-        if path.exists() {
-            std::fs::read_to_string(path).ok().map(|content| {
-                let raw_size = content.len();
-                let formatted = format!("# {}\n\n{}", label, content.trim());
-                (formatted, raw_size)
-            })
-        } else {
-            None
-        }
-    };
-
-    let project_dir = working_dir.unwrap_or(Path::new("."));
-    let project_preferred_tools = project_dir.join(".jcode").join("preferred-tools.md");
-    if let Some((content, size)) = load_file(
-        &project_preferred_tools,
-        "Project Preferred Tools (.jcode/preferred-tools.md)",
-    ) {
-        total_chars += size;
-        contents.push(content);
-    }
-
-    if let Ok(global_preferred_tools) =
-        crate::storage::jcode_dir().map(|dir| dir.join("preferred-tools.md"))
-        && !same_canonical_path(&project_preferred_tools, &global_preferred_tools)
-        && let Some((content, size)) = load_file(
-            &global_preferred_tools,
-            "Global Preferred Tools (~/.jcode/preferred-tools.md)",
-        )
+    if let Some((global_path, global_label)) = global_config_file(name)
+        && !same_canonical_path(&project_path, &global_path)
+        && let Some((content, size)) =
+            load_file(&global_path, &format!("Global {title} ({global_label})"))
     {
         total_chars += size;
         contents.push(content);

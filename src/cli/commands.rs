@@ -2600,7 +2600,7 @@ pub async fn run_single_message_command(
         super::provider_init::init_provider_for_run(choice, model, emit_json || emit_ndjson)
             .await?;
     let registry = crate::tool::Registry::new(provider.clone()).await;
-    // Load MCP servers from ~/.jcode/mcp.json so headless `jcode run` has the
+    // Load MCP servers from the MCP config files so headless `jcode run` has the
     // same `mcp__*` tools as interactive/server sessions. This is non-blocking:
     // `register_mcp_tools` advertises cached tool schemas synchronously (so the
     // first locked tool snapshot already contains MCP tools, for zero
@@ -2701,7 +2701,7 @@ fn run_command_auto_poke_enabled() -> bool {
         .unwrap_or_else(|| crate::config::config().features.auto_poke)
 }
 
-/// Whether headless `jcode run` should load MCP servers from `~/.jcode/mcp.json`.
+/// Whether headless `jcode run` should load MCP servers from the MCP config files.
 /// Enabled by default; set `JCODE_RUN_MCP=0` (or `false`/`off`/`no`) to skip MCP
 /// registration for latency-sensitive scripting. (#390)
 fn run_command_mcp_enabled() -> bool {

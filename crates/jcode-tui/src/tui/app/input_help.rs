@@ -44,7 +44,7 @@ impl App {
                 "/agents\nConfigure agent models for this session only, preserved on resume.\n\n/agents <swarm|review|judge|memory|ambient>\nChoose a session override. Use global default clears it, while inherit bypasses a global pin.\n\n/agents default [role] (or /agents global [role])\nEdit saved global defaults for all sessions without a session override. Ambient session choices apply to scheduled workers spawned from this session, not the daemon's independent ambient loop."
             }
             "swarm-prompt" => {
-                "/swarm-prompt\nOpen the active swarm routing prompt in $VISUAL or $EDITOR.\n\nJcode uses a nonblank project override at ./.jcode/swarm-prompt.md when present, then ~/.jcode/swarm-prompt.md, then the built-in default. If no editable override exists, this command creates the global file from the built-in default. Restart or reload Jcode after editing because running agent tool registries cache the prompt."
+                "/swarm-prompt\nOpen the active swarm routing prompt in $VISUAL or $EDITOR.\n\nJcode uses the first nonblank file of ./.agents/swarm-prompt.md, ./.jcode/swarm-prompt.md, ~/.agents/swarm-prompt.md, ~/.jcode/swarm-prompt.md, then the built-in default. If no editable override exists, this command creates ~/.agents/swarm-prompt.md from the built-in default. Restart or reload Jcode after editing because running agent tool registries cache the prompt."
             }
             "subagent" => {
                 "/subagent <prompt>\nLaunch a subagent immediately.\n\nOptional flags:\n  --type <kind>         sets the subagent type (default general)\n  --model <name>        overrides the subagent model for this run\n  --continue <id>       resumes an existing subagent session"

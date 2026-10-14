@@ -199,6 +199,7 @@ fn agents_md_distinct_project_and_global_files_are_both_loaded() {
 
 #[test]
 fn captured_agents_md_keeps_split_prompt_stable_after_file_write() {
+    let _guard = crate::storage::lock_test_env();
     let project_dir = tempfile::TempDir::new().unwrap();
     let agents_md = project_dir.path().join("AGENTS.md");
     std::fs::write(&agents_md, "original session instructions").unwrap();
@@ -787,6 +788,59 @@ fn desktop_prompt_detects_symlinked_nested_working_directory() {
     let (split, _) = build_system_prompt_split(None, &[], false, None, Some(&link));
     assert!(full.contains(DESKTOP_SELFDEV_MODE_PROMPT));
     assert!(split.static_part.contains(DESKTOP_SELFDEV_MODE_PROMPT));
+}
+
+#[test]
+fn project_agents_dir_config_is_loaded_and_wins_over_jcode_dir() {
+    with_prompt_guidance_home(|_home| {
+        let project = tempfile::TempDir::new().unwrap();
+        let agents = project.path().join(".agents");
+        let jcode = project.path().join(".jcode");
+        std::fs::create_dir(&agents).unwrap();
+        std::fs::create_dir(&jcode).unwrap();
+        std::fs::write(agents.join("system-prompt.md"), "agents base").unwrap();
+        std::fs::write(jcode.join("system-prompt.md"), "jcode base").unwrap();
+        std::fs::write(agents.join("swarm-prompt.md"), "agents swarm").unwrap();
+        std::fs::write(agents.join("prompt-overlay.md"), "agents overlay").unwrap();
+        std::fs::write(agents.join("preferred-tools.md"), "agents tools").unwrap();
+        std::fs::write(agents.join("AGENTS.md"), "agents instructions").unwrap();
+
+        assert_eq!(load_base_system_prompt(Some(project.path())), "agents base");
+        assert_eq!(load_swarm_prompt(Some(project.path())), "agents swarm");
+        let (prompt, info) =
+            build_system_prompt_full(None, &[], false, None, Some(project.path()));
+        assert!(prompt.contains("Project Prompt Overlay (.agents/prompt-overlay.md)"));
+        assert!(prompt.contains("agents overlay"));
+        assert!(prompt.contains("Project Preferred Tools (.agents/preferred-tools.md)"));
+        assert!(prompt.contains("agents tools"));
+        let (agents_md, _) = load_agents_md_files_from_dir(Some(project.path()));
+        assert!(agents_md.unwrap().contains("agents instructions"));
+        assert!(info.prompt_overlay_chars > 0);
+    });
+}
+
+#[test]
+fn global_agents_dir_config_is_loaded_and_wins_over_jcode_home() {
+    with_prompt_guidance_home(|home| {
+        let jcode_home = home.join(".jcode");
+        let global_agents = jcode_home.join("external/.agents");
+        std::fs::create_dir_all(&global_agents).unwrap();
+        std::fs::write(global_agents.join("system-prompt.md"), "global agents base").unwrap();
+        std::fs::write(jcode_home.join("system-prompt.md"), "jcode home base").unwrap();
+        std::fs::write(global_agents.join("prompt-overlay.md"), "global agents overlay").unwrap();
+        std::fs::write(jcode_home.join("prompt-overlay.md"), "jcode home overlay").unwrap();
+        std::fs::write(global_agents.join("AGENTS.md"), "global agents instructions").unwrap();
+        let project = tempfile::TempDir::new().unwrap();
+
+        assert_eq!(load_base_system_prompt(Some(project.path())), "global agents base");
+        let (overlay, _) = load_prompt_overlay_files_from_dir(Some(project.path()));
+        let overlay = overlay.unwrap();
+        assert!(overlay.contains("global agents overlay"));
+        assert!(!overlay.contains("jcode home overlay"));
+        let (agents_md, info) = load_agents_md_files_from_dir(Some(project.path()));
+        assert!(info.has_global_agents_md);
+        assert!(agents_md.unwrap().contains("global agents instructions"));
+    });
 }
 
 // Restore JCODE_HOME even when a regression assertion panics.

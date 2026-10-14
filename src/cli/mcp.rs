@@ -70,7 +70,7 @@ fn server_rows(config: &McpConfig) -> Result<Vec<Value>> {
 
 fn render_list(rows: &[Value]) -> String {
     if rows.is_empty() {
-        return "No MCP servers configured. Add servers to ~/.jcode/mcp.json or .jcode/mcp.json.\n"
+        return "No MCP servers configured. Add servers to ~/.agents/mcp.json or .agents/mcp.json.\n"
             .into();
     }
     let mut output = String::from("Configured MCP servers (not a connection check):\n");

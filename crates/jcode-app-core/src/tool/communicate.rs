@@ -1836,7 +1836,7 @@ impl CommunicateTool {
             BASE_DESCRIPTION.to_string()
         } else {
             format!(
-                "{BASE_DESCRIPTION}\n\nSwarm prompt (user-tunable via ~/.jcode/swarm-prompt.md):\n{swarm_prompt}"
+                "{BASE_DESCRIPTION}\n\nSwarm prompt (user-tunable via ~/.agents/swarm-prompt.md):\n{swarm_prompt}"
             )
         };
         Self { description }

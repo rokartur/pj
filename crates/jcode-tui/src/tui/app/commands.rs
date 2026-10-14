@@ -3077,25 +3077,31 @@ fn file_has_nonblank_content(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Same precedence as `prompt::load_swarm_prompt`; a fresh default goes to `~/.agents/`.
 fn ensure_swarm_prompt_edit_path(
     working_dir: Option<&str>,
+    agents_home: &std::path::Path,
     jcode_dir: &std::path::Path,
 ) -> std::io::Result<PathBuf> {
     let project_dir = match working_dir {
         Some(path) => PathBuf::from(path),
         None => std::env::current_dir()?,
     };
-    let project_path = project_dir.join(".jcode").join("swarm-prompt.md");
-    if file_has_nonblank_content(&project_path) {
-        return Ok(project_path);
+    let global_path = agents_home.join("swarm-prompt.md");
+    let candidates = [
+        project_dir.join(".agents").join("swarm-prompt.md"),
+        project_dir.join(".jcode").join("swarm-prompt.md"),
+        global_path.clone(),
+        jcode_dir.join("swarm-prompt.md"),
+    ];
+    if let Some(path) = candidates
+        .into_iter()
+        .find(|path| file_has_nonblank_content(path))
+    {
+        return Ok(path);
     }
 
-    let global_path = jcode_dir.join("swarm-prompt.md");
-    if file_has_nonblank_content(&global_path) {
-        return Ok(global_path);
-    }
-
-    std::fs::create_dir_all(jcode_dir)?;
+    std::fs::create_dir_all(agents_home)?;
     let contents = format!("{}\n", crate::prompt::DEFAULT_SWARM_PROMPT.trim());
     std::fs::write(&global_path, contents)?;
     Ok(global_path)
@@ -3113,8 +3119,10 @@ pub(super) fn handle_swarm_prompt_command(app: &mut App, trimmed: &str) -> bool 
         return false;
     }
 
-    let jcode_dir = match crate::storage::jcode_dir() {
-        Ok(path) => path,
+    let dirs = crate::storage::jcode_dir()
+        .and_then(|jcode_dir| Ok((crate::storage::user_home_path(".agents")?, jcode_dir)));
+    let (agents_home, jcode_dir) = match dirs {
+        Ok(dirs) => dirs,
         Err(error) => {
             app.push_display_message(DisplayMessage::error(format!(
                 "Failed to locate the Jcode config directory: {}",
@@ -3123,7 +3131,11 @@ pub(super) fn handle_swarm_prompt_command(app: &mut App, trimmed: &str) -> bool 
             return true;
         }
     };
-    let path = match ensure_swarm_prompt_edit_path(app.session.working_dir.as_deref(), &jcode_dir) {
+    let path = match ensure_swarm_prompt_edit_path(
+        app.session.working_dir.as_deref(),
+        &agents_home,
+        &jcode_dir,
+    ) {
         Ok(path) => path,
         Err(error) => {
             app.push_display_message(DisplayMessage::error(format!(

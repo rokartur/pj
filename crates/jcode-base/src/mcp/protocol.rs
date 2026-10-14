@@ -670,12 +670,18 @@ impl McpConfig {
     }
 
     /// Load project-local MCP config files from `project_root`, in override
-    /// order: `.jcode/mcp.json`, then `.mcp.json` (Claude Code project config),
-    /// then `.claude/mcp.json` (legacy compatibility). Later files override
+    /// order: `.jcode/mcp.json`, `.agents/mcp.json` (cross-tool `.agents`
+    /// convention), `.mcp.json` (Claude Code project config), then
+    /// `.claude/mcp.json` (legacy compatibility). Later files override
     /// same-named servers from earlier ones.
     fn load_project_locals(project_root: &std::path::Path) -> Self {
         let mut merged = Self::default();
-        for relative in [".jcode/mcp.json", ".mcp.json", ".claude/mcp.json"] {
+        for relative in [
+            ".jcode/mcp.json",
+            ".agents/mcp.json",
+            ".mcp.json",
+            ".claude/mcp.json",
+        ] {
             let path = project_root.join(relative);
             if path.exists()
                 && let Ok(config) = Self::load_from_file(&path)
@@ -694,7 +700,7 @@ impl McpConfig {
     }
 
     /// Load from default locations, resolving project-local config
-    /// (`.jcode/mcp.json`, `.mcp.json`, `.claude/mcp.json`, and the per-project
+    /// (`.jcode/mcp.json`, `.agents/mcp.json`, `.mcp.json`, `.claude/mcp.json`, and the per-project
     /// entries in `~/.claude.json`) against `project_dir` instead of the
     /// process working directory when provided.
     ///
@@ -720,6 +726,14 @@ impl McpConfig {
                     merged.servers.extend(config.servers);
                 }
             }
+        }
+
+        // Shared cross-tool global config (~/.agents/mcp.json)
+        if let Ok(agents_mcp) = crate::storage::user_home_path(".agents/mcp.json")
+            && agents_mcp.exists()
+            && let Ok(config) = Self::load_from_file(&agents_mcp)
+        {
+            merged.servers.extend(config.servers);
         }
 
         // Claude Code user/global config (~/.claude.json): top-level mcpServers

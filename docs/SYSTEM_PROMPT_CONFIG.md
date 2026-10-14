@@ -11,30 +11,49 @@ files, so you can tune agent behavior without rebuilding.
 3. Product-specific self-dev guidance. Sessions rooted in a Jcode Desktop
    checkout automatically receive the Desktop prompt and `desktop_selfdev` tool,
    separate from CLI/TUI self-dev flags, `selfdev`, and `debug_socket`.
-4. `AGENTS.md` — project `./AGENTS.md` and global `~/AGENTS.md`.
-5. Prompt overlay — `./.jcode/prompt-overlay.md` and `~/.jcode/prompt-overlay.md`.
-6. Preferred tools — `./.jcode/preferred-tools.md` and `~/.jcode/preferred-tools.md`.
+4. `AGENTS.md` — project `./.agents/AGENTS.md` and `./AGENTS.md`, global
+   `~/.agents/AGENTS.md` (or `~/AGENTS.md`).
+5. Prompt overlay — project and global `prompt-overlay.md`.
+6. Preferred tools — project and global `preferred-tools.md`.
 7. Memory and the active skill prompt (dynamic, not cached).
+
+## Config directory
+
+Config files live in the cross-tool `.agents/` directory, so no `.jcode/`
+directory is needed:
+
+```
+.agents/                 (project, or ~/.agents/ for global)
+├── AGENTS.md
+├── system-prompt.md
+├── prompt-overlay.md
+├── preferred-tools.md
+├── swarm-prompt.md
+├── mcp.json
+└── skills/<name>/SKILL.md
+```
+
+Each file is looked up in `.agents/` first, then in `.jcode/` (project) or
+`~/.jcode/` (global). The global `.jcode` directory respects `JCODE_HOME` when set.
 
 ## Adding guidance (most common)
 
 Append instructions without touching the default prompt:
 
-- `~/.jcode/prompt-overlay.md` — applies everywhere.
-- `./.jcode/prompt-overlay.md` — applies to one project.
+- `~/.agents/prompt-overlay.md` — applies everywhere.
+- `./.agents/prompt-overlay.md` — applies to one project.
 
 Both are included when present. For layers 4–6, if the project and global paths
 resolve to the same canonical path (for example, when working in `$HOME` or using
 symlink aliases), the file is included once under its project heading. Distinct
-files are still both included, even when their contents match. The global
-`.jcode` directory respects `JCODE_HOME` when set.
+files are still both included, even when their contents match.
 
 ## Replacing the base prompt
 
 To fully replace layer 1, create either file:
 
-- `./.jcode/system-prompt.md` (project, highest precedence)
-- `~/.jcode/system-prompt.md` (global)
+- `./.agents/system-prompt.md` (project, highest precedence)
+- `~/.agents/system-prompt.md` (global)
 
 The first non-empty file wins; otherwise the built-in default is used. An empty or
 whitespace-only file falls back to the default, so you cannot accidentally ship an
@@ -48,7 +67,7 @@ This replaces only the base prompt. AGENTS.md, overlays, skills, and memory stil
   prompt captured at start.
 - Editing the built-in `system_prompt.md` requires a rebuild (`selfdev build-reload`),
   since it is embedded with `include_str!`.
-- Swarm model-routing guidance has its own analogous file: `.jcode/swarm-prompt.md`.
+- Swarm model-routing guidance has its own analogous file: `.agents/swarm-prompt.md`.
   Use `/swarm-prompt` to edit the active project or global file. New agents load
   the latest contents immediately; already-running agents keep the prompt they
   captured at session creation so their tool definition and context cache stay stable.
