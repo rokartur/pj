@@ -136,7 +136,7 @@ impl Default for DisplayConfig {
             auto_server_reload: true,
             mouse_capture: true,
             debug_socket: false,
-            emoji: true,
+            emoji: false,
             centered: false,
             show_thinking: true,
             reasoning_display: Some(ReasoningDisplayMode::Full),

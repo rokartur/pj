@@ -178,9 +178,9 @@ mouse_capture = true
 # Enable debug socket for external control/testing (default: false)
 debug_socket = false
 
-# Render emoji in terminal-facing TUI and CLI output (default: true).
-# Set false here or set JCODE_NO_EMOJI=1 for ASCII fallbacks.
-emoji = true
+# Render emoji in terminal-facing TUI and CLI output (default: false).
+# When false, emoji become Nerd Font glyphs; JCODE_NO_EMOJI=0 turns emoji back on.
+emoji = false
 
 # Usage percentage wording: "left" (default) or "used".
 usage_display = "left"

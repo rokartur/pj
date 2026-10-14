@@ -973,10 +973,10 @@ fn test_display_alignment_defaults_to_left() {
 }
 
 #[test]
-fn display_emoji_defaults_on_and_deserializes_off() {
-    assert!(DisplayConfig::default().emoji);
-    let cfg: Config = toml::from_str("[display]\nemoji = false\n").expect("config parses");
-    assert!(!cfg.display.emoji);
+fn display_emoji_defaults_off_and_deserializes_on() {
+    assert!(!DisplayConfig::default().emoji);
+    let cfg: Config = toml::from_str("[display]\nemoji = true\n").expect("config parses");
+    assert!(cfg.display.emoji);
 }
 
 #[test]
@@ -1081,6 +1081,7 @@ fn no_emoji_environment_override_disables_emoji() {
     let prev = std::env::var_os("JCODE_NO_EMOJI");
     crate::env::set_var("JCODE_NO_EMOJI", "1");
     let mut cfg = Config::default();
+    cfg.display.emoji = true;
     cfg.apply_env_overrides();
     assert!(!cfg.display.emoji);
 

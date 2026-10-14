@@ -4,6 +4,6 @@
 //! boundary stays visible in the API surface.
 
 pub use jcode_core::output_style::{
-    emoji_enabled, replace_emoji_with_ascii, set_emoji_enabled, terminal_text,
+    emoji_enabled, replace_emoji_with_glyphs, set_emoji_enabled, terminal_text,
     terminal_text_with_emoji,
 };

@@ -23,7 +23,7 @@ mod tests {
     use ratatui::{layout::Rect, style::Style};
 
     #[test]
-    fn no_emoji_mode_rewrites_completed_frame_cells_to_ascii() {
+    fn no_emoji_mode_rewrites_completed_frame_cells_to_nerd_font_glyphs() {
         let mut buffer = Buffer::empty(Rect::new(0, 0, 24, 1));
         buffer.set_string(0, 0, "🐝 ready ✅ box ─", Style::default());
         adapt_buffer_for_emoji_enabled(&mut buffer, false);
@@ -34,7 +34,7 @@ mod tests {
             .collect::<String>();
         assert_eq!(
             rendered.split_whitespace().collect::<Vec<_>>(),
-            vec!["*", "ready", "+", "box", "─"]
+            vec!["\u{F0FA1}", "ready", "\u{F05E0}", "box", "─"]
         );
         assert!(!rendered.contains(['🐝', '✅']));
     }
