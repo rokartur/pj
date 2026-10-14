@@ -302,24 +302,16 @@ fn source_update_git(repo_dir: &std::path::Path, args: &[&str]) -> Result<String
     Ok(String::from_utf8(output.stdout)?.trim().to_string())
 }
 
-/// True when the source checkout has local commits that upstream lacks, so a
-/// fast-forward pull (and therefore auto-update) can never succeed. Returns
-/// `None` when the repo or upstream cannot be inspected.
-pub fn local_commits_ahead_of_upstream() -> Option<bool> {
+/// True when the source checkout has local commits that upstream lacks or
+/// uncommitted tracked changes, so a fast-forward pull (and therefore
+/// auto-update) cannot run safely. Returns `None` when the repo or upstream
+/// cannot be inspected.
+pub fn source_checkout_has_local_work() -> Option<bool> {
     let repo_dir = get_repo_dir()?;
-    let ahead = ProcessCommand::new("git")
-        .args(["rev-list", "--count", "@{u}..HEAD"])
-        .current_dir(&repo_dir)
-        .output()
-        .ok()?;
-    if !ahead.status.success() {
-        return None;
-    }
-    let count: u32 = String::from_utf8_lossy(&ahead.stdout)
-        .trim()
-        .parse()
-        .unwrap_or(0);
-    Some(count > 0)
+    let ahead = source_update_git(&repo_dir, &["rev-list", "--count", "@{u}..HEAD"]).ok()?;
+    let dirty =
+        source_update_git(&repo_dir, &["status", "--porcelain", "--untracked-files=no"]).ok()?;
+    Some(ahead.parse::<u32>().ok()? > 0 || !dirty.is_empty())
 }
 
 pub fn run_auto_update() -> Result<()> {

@@ -412,14 +412,11 @@ fn spawn_background_update_check(args: &Args) {
             Bus::global().publish(BusEvent::UpdateStatus(UpdateStatus::Checking));
             let status = source_update_check_status(hot_exec::check_for_updates());
             if matches!(status, UpdateStatus::Available { .. }) {
-                // A checkout with local commits can never fast-forward, so the
-                // pull below would always fail and surface a noisy "Update
-                // diverged. Press Ctrl+Y..." card in every new session.
-                // Developers with local work expect divergence; log it once
-                // and stay quiet in the UI (no Available/Error cards).
-                if hot_exec::local_commits_ahead_of_upstream() == Some(true) {
+                // `git pull --ff-only` fails on local commits or uncommitted tracked
+                // changes, so skip quietly instead of showing an error card every session.
+                if hot_exec::source_checkout_has_local_work() == Some(true) {
                     logging::info(
-                        "Auto-update skipped: local commits are ahead of upstream (diverged). \
+                        "Auto-update skipped: checkout has local commits or uncommitted changes. \
                          Merge or rebase manually when ready.",
                     );
                     Bus::global().publish(BusEvent::UpdateStatus(UpdateStatus::UpToDate));
