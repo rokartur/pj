@@ -650,7 +650,14 @@ fn classify_effort_distinguishes_reasoning_from_swarm_modes() {
 fn project_system_prompt_file_replaces_default_base_prompt() {
     use crate::prompt::load_base_system_prompt;
 
-    let dir = std::env::temp_dir().join(format!("jcode-sysprompt-{}", std::process::id()));
+    // A user-level system-prompt.md would win the empty-override fallback below.
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().unwrap();
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let dir = tempfile::TempDir::new().unwrap();
+    let dir = dir.path();
     let jcode_dir = dir.join(".jcode");
     std::fs::create_dir_all(&jcode_dir).unwrap();
     std::fs::write(
@@ -660,19 +667,22 @@ fn project_system_prompt_file_replaces_default_base_prompt() {
     .unwrap();
 
     assert_eq!(
-        load_base_system_prompt(Some(&dir)),
+        load_base_system_prompt(Some(dir)),
         "You are a custom agent."
     );
 
-    let (prompt, _info) = build_system_prompt_full(None, &[], false, None, Some(&dir));
+    let (prompt, _info) = build_system_prompt_full(None, &[], false, None, Some(dir));
     assert!(prompt.contains("You are a custom agent."));
     assert!(!prompt.contains("Jcode is open source"));
 
     // Empty override falls back to the built-in default.
     std::fs::write(jcode_dir.join("system-prompt.md"), "   \n").unwrap();
-    assert_eq!(load_base_system_prompt(Some(&dir)), DEFAULT_SYSTEM_PROMPT);
+    assert_eq!(load_base_system_prompt(Some(dir)), DEFAULT_SYSTEM_PROMPT);
 
-    std::fs::remove_dir_all(&dir).ok();
+    match prev_home {
+        Some(prev_home) => crate::env::set_var("JCODE_HOME", prev_home),
+        None => crate::env::remove_var("JCODE_HOME"),
+    }
 }
 
 fn desktop_prompt_checkout() -> tempfile::TempDir {

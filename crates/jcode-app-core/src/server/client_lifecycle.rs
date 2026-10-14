@@ -1215,7 +1215,7 @@ pub(super) async fn handle_client(
         }
 
         // Legacy/direct clients can send a prompt without Subscribe. Their
-        // first session action commits ownership, but inspection/attach does not.
+        // first session action commits the session, but inspection/attach does not.
         if provisional_session
             && matches!(
                 &request,

@@ -1237,6 +1237,11 @@ fn mac_hotkey_action_for_state(
 /// - macOS: On every 3rd launch, can suggest Ghostty and optionally hand off
 ///   to AI-guided setup by returning a prebuilt prompt.
 pub fn maybe_show_setup_hints() -> Option<StartupHints> {
+    // pj: the hotkey LaunchAgent (com.jcode.hotkey), launcher and compositor bindings are
+    // shared with an installed jcode, so pj must never install, migrate or remove them.
+    if !cfg!(test) {
+        return None;
+    }
     if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
         return None;
     }
