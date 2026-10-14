@@ -1,7 +1,7 @@
 //! pj footer, ported from pi's status-footer: one row under the input, the
 //! place on the left and the session on the right.
 //!
-//!   ~/Developer/pj master unstaged:2 +1 -1   ctx 42k (21%)  opus 4.8 high
+//!   ~/Developer/pj master ↑2 ↓1   ctx 42k (21%)  opus 4.8 high
 
 use super::TuiState;
 use super::info_widget::{GitInfo, InfoWidgetData};
@@ -15,9 +15,6 @@ pub(super) const FOOTER_HEIGHT: u16 = 2;
 const TEXT: Color = Color::Rgb(208, 208, 208);
 const SOFT: Color = Color::Rgb(188, 188, 188);
 const MUTED: Color = Color::Rgb(133, 133, 133);
-const GREEN: Color = Color::Rgb(95, 215, 95);
-const RED: Color = Color::Rgb(255, 95, 95);
-const AMBER: Color = Color::Rgb(215, 175, 95);
 
 pub(super) fn draw_footer(frame: &mut Frame, app: &dyn TuiState, area: Rect) {
     if area.height < FOOTER_HEIGHT || area.width == 0 {
@@ -85,7 +82,8 @@ fn place_spans(app: &dyn TuiState, data: &InfoWidgetData) -> Vec<Span<'static>> 
     spans
 }
 
-/// pi's git badges: branch, then only the counts that are non-zero.
+/// Branch, then commits to push and to pull when non-zero; the Changes widget
+/// carries the working-tree counts.
 fn git_spans(git: &GitInfo) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     if !git.branch.trim().is_empty() {
@@ -94,19 +92,11 @@ fn git_spans(git: &GitInfo) -> Vec<Span<'static>> {
             Style::default().fg(MUTED),
         ));
     }
-    let badges = [
-        ("staged:", git.staged, GREEN),
-        ("unstaged:", git.modified + git.untracked, AMBER),
-        ("↑", git.ahead, MUTED),
-        ("↓", git.behind, MUTED),
-        ("+", git.added_total, GREEN),
-        ("-", git.removed_total, RED),
-    ];
-    for (label, count, color) in badges {
+    for (arrow, count) in [("↑", git.ahead), ("↓", git.behind)] {
         if count > 0 {
             spans.push(Span::styled(
-                format!(" {label}{count}"),
-                Style::default().fg(color),
+                format!(" {arrow}{count}"),
+                Style::default().fg(MUTED),
             ));
         }
     }
@@ -211,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn git_badges_skip_zero_counts() {
+    fn git_shows_only_branch_and_nonzero_ahead_behind() {
         let git = GitInfo {
             branch: "main".into(),
             modified: 1,
@@ -221,7 +211,7 @@ mod tests {
             ..Default::default()
         };
         let line = Line::from(git_spans(&git));
-        assert_eq!(text(&line), " main unstaged:2 ↑2 +5");
+        assert_eq!(text(&line), " main ↑2");
     }
 
     #[test]

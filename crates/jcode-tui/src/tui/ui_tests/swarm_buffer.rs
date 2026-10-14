@@ -551,7 +551,7 @@ fn footer_row_sits_at_the_bottom_like_pi() {
         "blank row above the footer"
     );
     assert!(
-        footer.starts_with("~/jcode main unstaged:5 ↑1")
+        footer.starts_with("~/jcode main ↑1 ")
             && footer
                 .trim_end()
                 .ends_with("ctx 74k (29%)  gpt-5.6 sol high"),
@@ -623,7 +623,7 @@ fn widgets_render_detail_layer_without_repeating_status_line_facts() {
         .iter()
         .rfind(|row| row.starts_with("~/jcode"))
         .expect("footer row");
-    for owned in ["gpt-5.6 sol", "74k", "29%", "main", "unstaged:5"] {
+    for owned in ["gpt-5.6 sol", "74k", "29%", "main", "↑1"] {
         assert!(footer.contains(owned), "footer owns {owned:?}: {footer}");
     }
 }
