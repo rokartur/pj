@@ -9,4 +9,5 @@ pub mod hashline;
 pub mod import_pi;
 pub mod look;
 pub mod rtk;
+pub mod usagefleet;
 pub mod worktree;
