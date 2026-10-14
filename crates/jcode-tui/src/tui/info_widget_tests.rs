@@ -5,7 +5,7 @@ use super::{
     calculate_widget_height, effective_prompt_tokens, occasional_status_tip,
     render_kv_cache_widget, render_memory_compact, render_memory_widget, render_model_widget,
     render_todos_compact, render_todos_expanded, render_todos_widget, render_usage_compact,
-    render_usage_widget, swarm_plan_todos, truncate_smart,
+    render_usage_widget, swarm_plan_todos, todos_expanded_height, truncate_smart,
 };
 use crate::protocol::SwarmMemberStatus;
 use ratatui::layout::Rect;
@@ -163,7 +163,6 @@ fn todos_widgets_render_group_headers_when_groups_present() {
     };
     let data = InfoWidgetData {
         todos: vec![
-            mk(Some("optimize rendering"), "a", "completed"),
             mk(Some("optimize rendering"), "b", "in_progress"),
             mk(Some("fix scrollback"), "c", "pending"),
             mk(None, "d", "pending"),
@@ -171,13 +170,12 @@ fn todos_widgets_render_group_headers_when_groups_present() {
         ..Default::default()
     };
 
-    let expanded = lines_text_concat(&render_todos_expanded(&data, Rect::new(0, 0, 80, 14)));
+    let expanded =
+        lines_text_concat(&render_todos_widget(&data, Rect::new(0, 0, 80, 8)).all_lines());
     // Group headers appear with per-group progress counters, first-seen order,
     // and the ungrouped bucket renders under "Other".
-    assert!(expanded.contains("optimize rendering"), "{expanded}");
-    assert!(expanded.contains("1/2"), "{expanded}");
     assert!(
-        expanded.contains("1/2 · confidence plausible"),
+        expanded.contains("optimize rendering 0/1 · confidence plausible"),
         "group confidence missing: {expanded}"
     );
     assert!(expanded.contains("fix scrollback"), "{expanded}");
@@ -187,6 +185,26 @@ fn todos_widgets_render_group_headers_when_groups_present() {
     let other_idx = expanded.find("Other").unwrap();
     assert!(opt_idx < fix_idx, "first-seen group order: {expanded}");
     assert!(fix_idx < other_idx, "ungrouped bucket last: {expanded}");
+}
+
+#[test]
+fn overview_plan_lists_two_open_tasks_and_counts_the_rest() {
+    let data = InfoWidgetData {
+        todos: vec![
+            todo_item("a", "done", "completed", None),
+            todo_item("b", "queued one", "pending", None),
+            todo_item("c", "running", "in_progress", None),
+            todo_item("d", "queued two", "pending", None),
+        ],
+        ..Default::default()
+    };
+
+    let text = lines_text_concat(&render_todos_expanded(&data, Rect::new(0, 0, 80, 14)));
+    let rows: Vec<&str> = text.lines().collect();
+
+    assert!(rows[0].starts_with("Todos 1/4"), "{text}");
+    assert_eq!(&rows[1..], ["▶ running", "○ queued one +1"], "{text}");
+    assert_eq!(todos_expanded_height(&data), rows.len() as u16);
 }
 
 #[test]
@@ -212,19 +230,15 @@ fn task_group_headers_render_their_own_weighted_confidence() {
         ..Default::default()
     };
 
-    for text in [
-        lines_text_concat(&render_todos_widget(&data, Rect::new(0, 0, 90, 10)).all_lines()),
-        lines_text_concat(&render_todos_expanded(&data, Rect::new(0, 0, 90, 14))),
-    ] {
-        assert!(
-            text.contains("high confidence 0/2 · confidence plausible"),
-            "weighted group confidence missing: {text}"
-        );
-        assert!(
-            text.contains("lower confidence 0/1 · confidence plausible"),
-            "group-scoped confidence missing: {text}"
-        );
-    }
+    let text = lines_text_concat(&render_todos_widget(&data, Rect::new(0, 0, 90, 10)).all_lines());
+    assert!(
+        text.contains("high confidence 0/2 · confidence plausible"),
+        "weighted group confidence missing: {text}"
+    );
+    assert!(
+        text.contains("lower confidence 0/1 · confidence plausible"),
+        "group-scoped confidence missing: {text}"
+    );
 }
 
 #[test]
@@ -372,7 +386,7 @@ fn swarm_plan_todos_preserve_blockers_and_assignee_and_flow_to_renderer() {
         todos,
         ..Default::default()
     };
-    let text = lines_text(&render_todos_expanded(&data, Rect::new(0, 0, 80, 14)));
+    let text = lines_text(&render_todos_widget(&data, Rect::new(0, 0, 80, 14)).all_lines());
     // Blocked items get the dependency marker and suffix.
     assert!(text.contains("⊳"), "blocked glyph missing: {text}");
     assert!(text.contains("(blocked)"), "blocked suffix missing: {text}");
@@ -512,13 +526,9 @@ fn grouped_todos_show_closed_feedback_loop_on_their_group_headers() {
         ],
         ..Default::default()
     };
-    for text in [
-        lines_text_concat(&render_todos_widget(&data, Rect::new(0, 0, 70, 10)).all_lines()),
-        lines_text_concat(&render_todos_expanded(&data, Rect::new(0, 0, 70, 14))),
-    ] {
-        assert!(text.contains("loop strong"), "group loop missing: {text}");
-        assert!(text.contains("loop weak"), "low group loop missing: {text}");
-    }
+    let text = lines_text_concat(&render_todos_widget(&data, Rect::new(0, 0, 70, 10)).all_lines());
+    assert!(text.contains("loop strong"), "group loop missing: {text}");
+    assert!(text.contains("loop weak"), "low group loop missing: {text}");
 }
 
 #[test]
@@ -572,7 +582,7 @@ fn swarm_plan_gate_items_render_like_normal_items() {
         todos: swarm_plan_todos(&items),
         ..Default::default()
     };
-    let text = lines_text(&render_todos_expanded(&data, Rect::new(0, 0, 80, 14)));
+    let text = lines_text(&render_todos_widget(&data, Rect::new(0, 0, 80, 14)).all_lines());
     assert!(text.contains("Critique the work"), "{text}");
     assert!(text.contains("(blocked)"), "gate blocked on parent: {text}");
 }
@@ -632,7 +642,7 @@ fn cost_based_usage_widgets_show_price_and_tokens() {
     assert!(expanded_text.contains("$0.0123"));
     assert!(expanded_text.contains("12.3K in + 678 out"));
 
-    let compact_text = lines_text(&render_usage_compact(&usage, 40, false));
+    let compact_text = lines_text(&render_usage_compact(&usage, false));
     assert!(compact_text.contains("$0.0123"));
     assert!(compact_text.contains("12.3K in + 678 out"));
 }

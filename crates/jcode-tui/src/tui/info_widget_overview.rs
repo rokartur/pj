@@ -1,9 +1,7 @@
 use super::info_widget::{
     InfoWidgetData, UsageProvider, changes_section_height, is_traceworthy_memory_event,
-    model_info_height,
+    model_info_height, todos_expanded_height,
 };
-
-pub(crate) const MAX_TODO_LINES: usize = 12;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InfoPageKind {
@@ -128,14 +126,11 @@ fn compact_usage_height(data: &InfoWidgetData) -> u16 {
             // Single "$cost · tokens" line.
             return 1;
         }
-        // Subscription-style providers render an optional provider label plus
-        // whichever primary, secondary, and Spark windows are actually present.
-        let label = info.provider.label();
-        let label_line = u16::from(!label.is_empty());
+        // Subscription-style providers render one row per window actually present.
         let primary_line = u16::from(info.primary_limit_label.is_some());
         let secondary_line = u16::from(info.secondary_limit_label.is_some());
         let spark_line = u16::from(info.spark.is_some());
-        return label_line + primary_line + secondary_line + spark_line;
+        return primary_line + secondary_line + spark_line;
     }
     0
 }
@@ -157,17 +152,7 @@ fn compact_overview_height(data: &InfoWidgetData) -> u16 {
 }
 
 fn expanded_todos_height(data: &InfoWidgetData) -> u16 {
-    if data.todos.is_empty() {
-        return 0;
-    }
-
-    let available_lines = MAX_TODO_LINES.saturating_sub(1);
-    let todo_lines = data.todos.len().min(available_lines);
-    let mut height = 1 + u16::try_from(todo_lines).unwrap_or(u16::MAX);
-    if data.todos.len() > available_lines {
-        height += 1;
-    }
-    height
+    todos_expanded_height(data)
 }
 
 fn expanded_memory_height(data: &InfoWidgetData) -> u16 {

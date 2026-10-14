@@ -32,7 +32,7 @@ mod tips;
 mod todos_render;
 #[path = "info_widget_usage.rs"]
 mod usage_render;
-use super::info_widget_overview::{InfoPageKind, MAX_TODO_LINES, compute_page_layout};
+use super::info_widget_overview::{InfoPageKind, compute_page_layout};
 use super::workspace_map::VisibleWorkspaceRow;
 use crate::ambient::AmbientStatus;
 pub use crate::memory_types::{
@@ -61,12 +61,16 @@ pub(crate) use git::{edited_paths_from_tool_call, resolve_edited_path};
 pub use graph::{GraphEdge, GraphNode, build_graph_topology, graph_node_score};
 pub(crate) use memory_utils::is_traceworthy_memory_event;
 use memory_utils::{memory_active_summary, memory_last_trace_summary, memory_state_detail};
-use model::{render_model_info, render_model_widget, runtime_has_data, runtime_height};
+use model::{
+    overview_runtime_height, render_model_info, render_model_widget, runtime_has_data,
+    throughput_label,
+};
 use swarm_background::{render_background_compact, render_background_widget, render_swarm_widget};
 use text::{truncate_smart, truncate_with_ellipsis};
 pub(crate) use tips::occasional_status_tip;
 use tips::render_tips_widget;
 pub(crate) use todos_render::swarm_plan_todos;
+pub(super) use todos_render::todos_expanded_height;
 use todos_render::{render_todos_compact, render_todos_expanded, render_todos_widget};
 use usage_render::{render_usage_compact, render_usage_widget};
 
@@ -77,7 +81,7 @@ pub(super) fn changes_section_height(data: &InfoWidgetData) -> u16 {
 
 /// Overview rows used by the Runtime section, mirroring [`render_sections`].
 pub(super) fn model_info_height(data: &InfoWidgetData) -> u16 {
-    runtime_height(data)
+    overview_runtime_height(data)
 }
 
 /// Types of info widgets that can be displayed
@@ -1450,6 +1454,9 @@ fn render_overview_framed(data: &InfoWidgetData, inner: Rect) -> Option<Framed> 
         InfoPageKind::MemoryExpanded => "Overview · memory",
     };
     let mut framed = Framed::body(lines).title(frame::label(title));
+    if let Some(tps) = throughput_label(data) {
+        framed = framed.title_right(frame::dim(tps));
+    }
     if layout.show_dots {
         let mut dots: Vec<Span<'static>> = Vec::new();
         for i in 0..layout.pages.len() {
@@ -1819,10 +1826,7 @@ fn render_kv_cache_summary_line(cache: &CacheHitInfo) -> Line<'static> {
         .unwrap_or(lifetime_pct);
     let color = kv_cache_optimal_color(health_pct);
 
-    let mut spans = vec![Span::styled(
-        "KV cache: ",
-        Style::default().fg(rgb(180, 180, 190)).bold(),
-    )];
+    let mut spans = vec![Span::styled("kv ", Style::default().fg(rgb(140, 140, 150)))];
 
     if let Some(warm_pct) = warm_pct {
         spans.push(Span::styled(
@@ -1851,16 +1855,6 @@ fn render_kv_cache_summary_line(cache: &CacheHitInfo) -> Line<'static> {
             Style::default().fg(color).bold(),
         ));
     }
-
-    spans.push(Span::styled(" · ", Style::default().fg(rgb(80, 80, 90))));
-    spans.push(Span::styled(
-        "session ",
-        Style::default().fg(rgb(140, 140, 150)),
-    ));
-    spans.push(Span::styled(
-        format!("{}%", lifetime_pct),
-        Style::default().fg(color).bold(),
-    ));
 
     Line::from(spans)
 }
@@ -2114,11 +2108,7 @@ fn render_sections(
     if let Some(info) = &data.usage_info
         && info.available
     {
-        lines.extend(render_usage_compact(
-            info,
-            inner.width,
-            data.usage_display_used,
-        ));
+        lines.extend(render_usage_compact(info, data.usage_display_used));
     }
 
     if let Some(cache) = data.cache_hit_info.as_ref() {

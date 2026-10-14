@@ -605,11 +605,12 @@ fn widgets_render_detail_layer_without_repeating_status_line_facts() {
         .join("\n");
     assert!(!widgets.is_empty(), "expected widgets:\n{frame}");
 
+    assert!(widgets.contains("unstaged:5 ↑1"), "Changes line:\n{frame}");
     assert!(
-        widgets.contains("unstaged:5 ↑1"),
-        "Changes line:\n{frame}"
+        rows.iter()
+            .any(|row| row.contains("Overview") && row.contains("62 tok/s")),
+        "throughput on Overview border:\n{frame}"
     );
-    assert!(widgets.contains("62 tok/s"), "Runtime detail:\n{frame}");
     for owned in [
         "GPT-5.6", "74k", "256k", "29%", "OAuth", "OpenAI", "main", "~3",
     ] {

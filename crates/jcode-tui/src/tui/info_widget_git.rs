@@ -71,7 +71,11 @@ pub(super) fn changes_line(info: &GitInfo) -> Option<Line<'static>> {
     let muted = rgb(130, 130, 145);
     let badges = [
         ("staged:", info.staged, green),
-        ("unstaged:", info.modified + info.untracked, rgb(240, 200, 80)),
+        (
+            "unstaged:",
+            info.modified + info.untracked,
+            rgb(240, 200, 80),
+        ),
         ("+", info.added_total, green),
         ("−", info.removed_total, rgb(200, 100, 95)),
         ("↑", info.ahead, muted),
@@ -147,7 +151,6 @@ mod tests {
         assert!(!changes_has_data(&clean));
         assert_eq!(changes_height(&clean), 0);
     }
-
 
     #[test]
     fn porcelain_pairs_collapse_to_one_letter() {

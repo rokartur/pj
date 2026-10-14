@@ -115,7 +115,6 @@ fn usage_unavailable_line() -> Line<'static> {
 
 pub(super) fn render_usage_compact(
     info: &UsageInfo,
-    width: u16,
     usage_display_used: bool,
 ) -> Vec<Line<'static>> {
     if !info.available {
@@ -152,32 +151,21 @@ pub(super) fn render_usage_compact(
         .map(crate::usage::format_reset_time);
 
     let mut lines = Vec::new();
-    let label = info.provider.label();
-    if !label.is_empty() {
-        lines.push(Line::from(vec![Span::styled(
-            format!("{} limits", label),
-            Style::default()
-                .fg(rgb(140, 140, 150))
-                .add_modifier(ratatui::style::Modifier::DIM),
-        )]));
-    }
     if let Some(primary_label) = info.primary_limit_label.as_deref() {
-        lines.push(render_labeled_bar(
+        lines.push(render_compact_bar(
             primary_label,
             five_hr_used,
             five_hr_left,
             five_hr_reset.as_deref(),
-            width,
             usage_display_used,
         ));
     }
     if let Some(secondary_label) = info.secondary_limit_label.as_deref() {
-        lines.push(render_labeled_bar(
+        lines.push(render_compact_bar(
             secondary_label,
             seven_day_used,
             seven_day_left,
             seven_day_reset.as_deref(),
-            width,
             usage_display_used,
         ));
     }
@@ -188,16 +176,69 @@ pub(super) fn render_usage_compact(
             .spark_resets_at
             .as_deref()
             .map(crate::usage::format_reset_time);
-        lines.push(render_labeled_bar(
+        lines.push(render_compact_bar(
             "Spark",
             spark_used,
             spark_left,
             spark_reset.as_deref(),
-            width,
             usage_display_used,
         ));
     }
     lines
+}
+
+/// Overview quota row: `5h ▰▰▰▱▱▱▱▱▱▱ 77% · 3h 40m`. The percentage follows
+/// `usage_display_used`; the bar always fills with usage.
+fn render_compact_bar(
+    label: &str,
+    used_pct: u8,
+    left_pct: u8,
+    reset_time: Option<&str>,
+    usage_display_used: bool,
+) -> Line<'static> {
+    const BAR_WIDTH: usize = 10;
+    let color = remaining_color(left_pct);
+    let filled = ((used_pct as f32 / 100.0) * BAR_WIDTH as f32).round() as usize;
+    let display_pct = if usage_display_used {
+        used_pct
+    } else {
+        left_pct
+    };
+    let suffix = match reset_time {
+        Some(reset) if left_pct == 0 => format!(" resets {reset}"),
+        Some(reset) => format!(" {display_pct}% · {reset}"),
+        None => format!(" {display_pct}%"),
+    };
+    Line::from(vec![
+        Span::styled(
+            format!("{} ", short_window_label(label)),
+            Style::default().fg(rgb(140, 140, 150)),
+        ),
+        Span::styled("▰".repeat(filled), Style::default().fg(color)),
+        Span::styled(
+            "▱".repeat(BAR_WIDTH.saturating_sub(filled)),
+            Style::default().fg(rgb(50, 50, 60)),
+        ),
+        Span::styled(suffix, Style::default().fg(color)),
+    ])
+}
+
+fn short_window_label(label: &str) -> &str {
+    match label {
+        "5-hour" => "5h",
+        "Weekly" => "7d",
+        other => other,
+    }
+}
+
+fn remaining_color(left_pct: u8) -> Color {
+    if left_pct <= 20 {
+        rgb(255, 100, 100)
+    } else if left_pct <= 50 {
+        rgb(255, 200, 100)
+    } else {
+        rgb(100, 200, 100)
+    }
 }
 
 fn render_labeled_bar(
@@ -208,13 +249,7 @@ fn render_labeled_bar(
     width: u16,
     usage_display_used: bool,
 ) -> Line<'static> {
-    let color = if left_pct <= 20 {
-        rgb(255, 100, 100)
-    } else if left_pct <= 50 {
-        rgb(255, 200, 100)
-    } else {
-        rgb(100, 200, 100)
-    };
+    let color = remaining_color(left_pct);
 
     const LABEL_WIDTH: usize = 7;
     const MIN_BAR_WIDTH: usize = 4;
@@ -338,7 +373,7 @@ mod tests {
             ..Default::default()
         };
 
-        let text = render_usage_compact(&info, 50, false)
+        let text = render_usage_compact(&info, false)
             .iter()
             .map(line_text)
             .collect::<Vec<_>>()
@@ -356,13 +391,35 @@ mod tests {
             ..Default::default()
         };
 
-        let lines = render_usage_compact(&info, 40, false);
+        let lines = render_usage_compact(&info, false);
         let text = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
 
         assert!(text.contains("Monthly"));
-        assert!(!text.contains("5-hour"));
-        assert!(!text.contains("Weekly"));
-        assert_eq!(lines.len(), 2); // Provider label plus one quota bar.
+        assert!(!text.contains("5h"));
+        assert!(!text.contains("7d"));
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn overview_bars_use_short_labels_without_left_word() {
+        let info = UsageInfo {
+            provider: UsageProvider::Anthropic,
+            primary_limit_label: Some("5-hour".to_string()),
+            five_hour: 0.23,
+            five_hour_resets_at: None,
+            secondary_limit_label: Some("Weekly".to_string()),
+            seven_day: 0.66,
+            available: true,
+            ..Default::default()
+        };
+
+        let text = render_usage_compact(&info, false)
+            .iter()
+            .map(line_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(text, "5h ▰▰▱▱▱▱▱▱▱▱ 77%\n7d ▰▰▰▰▰▰▰▱▱▱ 34%");
     }
 }
 

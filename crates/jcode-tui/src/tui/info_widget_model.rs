@@ -12,11 +12,6 @@ use super::text::truncate_smart;
 use crate::tui::color_support::rgb;
 use ratatui::prelude::*;
 
-/// Content rows the Runtime widget renders, mirroring [`render_model_widget`].
-pub(super) fn runtime_height(data: &InfoWidgetData) -> u16 {
-    runtime_rows(data).len() as u16
-}
-
 pub(super) fn runtime_has_data(data: &InfoWidgetData) -> bool {
     !runtime_rows(data).is_empty()
 }
@@ -44,13 +39,38 @@ pub(super) fn render_model_widget(data: &InfoWidgetData, inner: Rect) -> Framed 
     framed
 }
 
-/// Overview section: every runtime fact as a row, no border.
-pub(super) fn render_model_info(data: &InfoWidgetData, inner: Rect) -> Vec<Line<'static>> {
-    let max_len = inner.width.saturating_sub(2) as usize;
+/// Overview section: the runtime facts joined on one row. Throughput rides the
+/// Overview border instead (see [`throughput_label`]).
+pub(super) fn render_model_info(data: &InfoWidgetData, inner: Rect) -> Option<Line<'static>> {
+    let text = overview_runtime_text(data);
+    if text.is_empty() {
+        return None;
+    }
+    Some(Line::from(Span::styled(
+        truncate_smart(&text, inner.width as usize),
+        Style::default().fg(rgb(140, 140, 150)),
+    )))
+}
+
+/// Overview rows used by the runtime section, mirroring [`render_model_info`].
+pub(super) fn overview_runtime_height(data: &InfoWidgetData) -> u16 {
+    u16::from(!overview_runtime_text(data).is_empty())
+}
+
+pub(super) fn throughput_label(data: &InfoWidgetData) -> Option<String> {
+    let tps = data
+        .tokens_per_second
+        .filter(|t| t.is_finite() && *t > 0.1)?;
+    Some(format!("{tps:.0} tok/s"))
+}
+
+fn overview_runtime_text(data: &InfoWidgetData) -> String {
     runtime_rows(data)
         .into_iter()
-        .map(|row| row.into_line(max_len))
-        .collect()
+        .filter(|row| row.icon != TPS_ICON)
+        .map(|row| row.text)
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 const TPS_ICON: &str = "⏱";
@@ -236,7 +256,7 @@ mod tests {
         let mut d = data();
         d.service_tier = None;
         assert!(!runtime_has_data(&d));
-        assert_eq!(runtime_height(&d), 0);
+        assert!(runtime_rows(&d).is_empty());
     }
 
     #[test]
@@ -246,7 +266,7 @@ mod tests {
         d.session_name = Some("sauropod".to_string());
         d.session_count = Some(3);
         let framed = render_model_widget(&d, Rect::new(0, 0, 30, 8));
-        assert_eq!(framed.lines.len() as u16, runtime_height(&d));
+        assert_eq!(framed.lines.len(), runtime_rows(&d).len());
         assert!(text(framed.all_lines()).contains("sauropod · 3 sessions"));
     }
 }
