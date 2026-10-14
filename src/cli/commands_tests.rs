@@ -1742,3 +1742,103 @@ async fn one_shot_cleanup_preserves_the_original_command_error() {
         ));
     }
 }
+
+fn pending_await_state(session_id: &str) -> serde_json::Value {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_millis() as u64;
+    serde_json::json!({
+        "key": "await-key",
+        "session_id": session_id,
+        "swarm_id": "swarm",
+        "target_status": ["completed"],
+        "requested_ids": ["worker"],
+        "created_at_unix_ms": now_ms,
+        "deadline_unix_ms": now_ms + 60_000,
+        "background": true,
+        "wake": true,
+    })
+}
+
+#[tokio::test]
+async fn run_waits_for_background_swarm_await_wake() {
+    // Given
+    let _env_lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME", "JCODE_RUNTIME_DIR"]);
+    let temp = tempfile::tempdir().expect("tempdir");
+    crate::env::set_var("JCODE_HOME", temp.path().join("home"));
+    crate::env::set_var("JCODE_RUNTIME_DIR", temp.path().join("runtime"));
+    let session_id = "session_run_await_wake";
+    let state_dir = temp.path().join("runtime/jcode-await-members");
+    std::fs::create_dir_all(&state_dir).expect("state dir");
+    std::fs::write(
+        state_dir.join("await-key.json"),
+        pending_await_state(session_id).to_string(),
+    )
+    .expect("write await state");
+    let wake_delivery = tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        crate::soft_interrupt_store::append(
+            session_id,
+            crate::agent::SoftInterruptMessage {
+                content: "Swarm await finished".to_string(),
+                images: Vec::new(),
+                urgent: false,
+                source: crate::agent::SoftInterruptSource::BackgroundTask,
+                client_id: None,
+            },
+        )
+        .expect("queue wake");
+    });
+
+    // When
+    let wake = take_swarm_await_wake(session_id)
+        .await
+        .expect("wait for wake");
+
+    // Then
+    wake_delivery.await.expect("wake delivery");
+    assert_eq!(wake.as_deref(), Some("Swarm await finished"));
+    assert!(
+        crate::soft_interrupt_store::load(session_id)
+            .expect("load store")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn run_ends_without_waiting_once_the_swarm_await_resolved() {
+    // Given
+    let _env_lock = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME", "JCODE_RUNTIME_DIR"]);
+    let temp = tempfile::tempdir().expect("tempdir");
+    crate::env::set_var("JCODE_HOME", temp.path().join("home"));
+    crate::env::set_var("JCODE_RUNTIME_DIR", temp.path().join("runtime"));
+    let session_id = "session_run_await_resolved";
+    let state_dir = temp.path().join("runtime/jcode-await-members");
+    std::fs::create_dir_all(&state_dir).expect("state dir");
+    let pending = pending_await_state(session_id);
+    let mut resolved = pending.clone();
+    resolved["final_response"] = serde_json::json!({
+        "completed": true,
+        "members": [],
+        "summary": "All members done.",
+        "resolved_at_unix_ms": pending["created_at_unix_ms"],
+    });
+    std::fs::write(state_dir.join("await-key.bak"), pending.to_string()).expect("write backup");
+    std::fs::write(state_dir.join("await-key.json"), resolved.to_string())
+        .expect("write await state");
+
+    // When
+    let wake = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        take_swarm_await_wake(session_id),
+    )
+    .await
+    .expect("a resolved await must not keep the run waiting")
+    .expect("check for wake");
+
+    // Then
+    assert_eq!(wake, None);
+}

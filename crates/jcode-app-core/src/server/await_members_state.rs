@@ -258,7 +258,8 @@ pub(super) fn all_pending_await_members_including_expired() -> Vec<PersistedAwai
     let mut pending = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_file() {
+        // write_json_fast keeps the previous version as <key>.bak, which still reads as pending.
+        if !path.is_file() || path.extension().is_none_or(|ext| ext != "json") {
             continue;
         }
 

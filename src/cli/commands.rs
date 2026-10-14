@@ -2959,6 +2959,11 @@ async fn run_single_message_command_plain_with_auto_poke(
     loop {
         agent.run_once(&next_message).await?;
         turns_completed += 1;
+        if let Some(wake) = take_swarm_await_wake(agent.session_id()).await? {
+            next_message = wake;
+            eprintln!("A background swarm await finished. Passing its result to the agent.");
+            continue;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -3041,6 +3046,10 @@ async fn run_single_message_command_capture_with_auto_poke(
     loop {
         outputs.push(agent.run_once_capture(&next_message).await?);
         turns_completed += 1;
+        if let Some(wake) = take_swarm_await_wake(agent.session_id()).await? {
+            next_message = wake;
+            continue;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -3101,6 +3110,41 @@ async fn run_single_message_command_capture_with_auto_poke(
         }
     }
     Ok(outputs.join("\n\n"))
+}
+
+const RUN_AWAIT_WAKE_POLL: std::time::Duration = std::time::Duration::from_millis(500);
+// The server persists the await result before it queues the wake, so the wake can trail it.
+const RUN_AWAIT_WAKE_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// `pj run` has no live agent on the server, so a background `swarm await_members`
+/// wake lands in the soft-interrupt store. Wait for it and return it as the next message.
+async fn take_swarm_await_wake(session_id: &str) -> Result<Option<String>> {
+    let mut awaited = false;
+    let mut await_finished_at: Option<std::time::Instant> = None;
+    loop {
+        let interrupts = crate::soft_interrupt_store::take(session_id)?;
+        if !interrupts.is_empty() {
+            let contents: Vec<String> = interrupts
+                .into_iter()
+                .map(|interrupt| interrupt.content)
+                .collect();
+            return Ok(Some(contents.join("\n\n")));
+        }
+        let wake_pending = crate::server::pending_await_members_for_session(session_id)
+            .iter()
+            .any(|state| state.background && state.wake);
+        if wake_pending {
+            awaited = true;
+        } else if !awaited
+            || await_finished_at
+                .get_or_insert_with(std::time::Instant::now)
+                .elapsed()
+                >= RUN_AWAIT_WAKE_GRACE
+        {
+            return Ok(None);
+        }
+        tokio::time::sleep(RUN_AWAIT_WAKE_POLL).await;
+    }
 }
 
 fn restore_agent_session_if_requested(
@@ -3179,6 +3223,25 @@ async fn run_single_message_command_ndjson(
             break;
         }
         turns_completed += 1;
+        match take_swarm_await_wake(&session_id).await {
+            Ok(Some(wake)) => {
+                next_message = wake;
+                write_json_line(
+                    &mut stdout,
+                    &serde_json::json!({
+                        "type": "swarm_await_wake",
+                        "session_id": session_id,
+                        "message": next_message,
+                    }),
+                )?;
+                continue;
+            }
+            Ok(None) => {}
+            Err(err) => {
+                result = Err(err);
+                break;
+            }
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
