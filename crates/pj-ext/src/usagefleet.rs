@@ -42,33 +42,22 @@ pub struct GroupView {
     pub blocked_until: Option<String>,
 }
 
-/// "Artur: 5h 30% · 7d 17%" (used, or left when `show_used` is false), or None outside a
-/// group or when the group repeats the account's used %.
-pub fn group_line(
-    view: &GroupView,
-    account_used_pct: Option<(f64, f64)>,
-    show_used: bool,
-) -> Option<String> {
-    let group = view.group.as_deref()?;
-    let used = (view.session_pct?.round(), view.weekly_pct?.round());
-    // The server does not say how many groups there are; a sole group's budget is the whole account.
-    if account_used_pct.map(|(five_hour, seven_day)| (five_hour.round(), seven_day.round()))
-        == Some(used)
-    {
-        return None;
-    }
-    let shown = |pct: f64| {
-        if show_used {
-            pct
-        } else {
-            (100.0 - pct).max(0.0)
-        }
-    };
-    Some(format!(
-        "{group}: 5h {}% · 7d {}%",
-        shown(used.0),
-        shown(used.1)
-    ))
+/// The group's used percentages, rounded; over 100 when the group overran its budget.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupQuota {
+    pub name: String,
+    pub five_hour_used: u16,
+    pub seven_day_used: u16,
+}
+
+/// None outside a group.
+pub fn group_quota(view: &GroupView) -> Option<GroupQuota> {
+    let used = |pct: f64| pct.round().max(0.0) as u16;
+    Some(GroupQuota {
+        name: view.group.clone()?,
+        five_hour_used: used(view.session_pct?),
+        seven_day_used: used(view.weekly_pct?),
+    })
 }
 
 /// Mirrors `usagefleet guard`: why a prompt is refused, or None unless the server says `blocked`.
@@ -116,26 +105,16 @@ mod tests {
     }
 
     #[test]
-    fn shows_the_group_budget_and_nothing_outside_a_group() {
+    fn reads_the_group_quota_and_nothing_outside_a_group() {
         assert_eq!(
-            group_line(&view(Some("Artur"), 30.4, 17.0), None, true).as_deref(),
-            Some("Artur: 5h 30% · 7d 17%")
+            group_quota(&view(Some("Artur"), 104.6, 17.2)),
+            Some(GroupQuota {
+                name: "Artur".to_string(),
+                five_hour_used: 105,
+                seven_day_used: 17,
+            })
         );
-        assert_eq!(
-            group_line(&view(Some("Artur"), 104.4, 17.0), None, false).as_deref(),
-            Some("Artur: 5h 0% · 7d 83%")
-        );
-        assert_eq!(group_line(&view(None, 30.4, 17.0), None, true), None);
-    }
-
-    #[test]
-    fn hides_a_group_whose_budget_repeats_the_accounts() {
-        let artur = view(Some("Artur"), 29.0, 52.0);
-        assert_eq!(group_line(&artur, Some((29.2, 51.8)), true), None);
-        assert_eq!(
-            group_line(&artur, Some((58.0, 52.0)), true).as_deref(),
-            Some("Artur: 5h 29% · 7d 52%")
-        );
+        assert_eq!(group_quota(&view(None, 30.4, 17.0)), None);
     }
 
     #[test]
