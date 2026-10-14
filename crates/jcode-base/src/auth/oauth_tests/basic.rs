@@ -173,19 +173,21 @@ fn claude_oauth_constants() {
 }
 
 #[tokio::test]
-async fn fetch_claude_profile_email_reads_account_email() -> Result<()> {
+async fn fetch_claude_profile_reads_account_email_and_uuid() -> Result<()> {
     let body = serde_json::json!({
         "account": {
-            "email": "user@example.com"
+            "email": "user@example.com",
+            "uuid": "acc-123"
         }
     })
     .to_string();
     let (port, _handle) = mock_token_server(200, &body).await;
 
     let url = format!("http://127.0.0.1:{}/api/oauth/profile", port);
-    let email = fetch_claude_profile_email_at_url("token", &url).await?;
+    let account = fetch_claude_profile_account_at_url("token", &url).await?;
 
-    assert_eq!(email, Some("user@example.com".to_string()));
+    assert_eq!(account.email, Some("user@example.com".to_string()));
+    assert_eq!(account.uuid, Some("acc-123".to_string()));
     Ok(())
 }
 

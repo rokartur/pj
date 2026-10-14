@@ -485,6 +485,8 @@ pub enum BusEvent {
     /// from the cached one, so the branch/dirty/commit chrome needs a repaint
     /// now rather than at the next unrelated redraw.
     GitInfoRefreshed,
+    /// pj: the usagefleet group budget of the active Claude account changed.
+    UsagefleetRefreshed,
     /// Productivity report finished generating off the UI thread
     ProductivityReportReady(ProductivityReportReady),
 }

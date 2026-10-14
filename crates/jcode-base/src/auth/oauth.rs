@@ -950,12 +950,33 @@ struct ClaudeProfileResponse {
 #[derive(Deserialize, Default)]
 struct ClaudeProfileAccount {
     email: Option<String>,
+    uuid: Option<String>,
 }
 
 async fn fetch_claude_profile_email_at_url(
     access_token: &str,
     profile_url: &str,
 ) -> Result<Option<String>> {
+    Ok(
+        fetch_claude_profile_account_at_url(access_token, profile_url)
+            .await?
+            .email,
+    )
+}
+
+/// The Claude account uuid behind `access_token`, the key usagefleet stores device tokens under.
+pub async fn fetch_claude_account_uuid(access_token: &str) -> Result<Option<String>> {
+    Ok(
+        fetch_claude_profile_account_at_url(access_token, claude::PROFILE_URL)
+            .await?
+            .uuid,
+    )
+}
+
+async fn fetch_claude_profile_account_at_url(
+    access_token: &str,
+    profile_url: &str,
+) -> Result<ClaudeProfileAccount> {
     let client = crate::provider::shared_http_client();
     let resp = client
         .get(profile_url)
@@ -976,7 +997,7 @@ async fn fetch_claude_profile_email_at_url(
     }
 
     let profile: ClaudeProfileResponse = resp.json().await?;
-    Ok(profile.account.email)
+    Ok(profile.account)
 }
 
 /// Fetch profile metadata for a Claude account and persist any discovered fields.
