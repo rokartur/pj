@@ -660,7 +660,7 @@ impl Tool for TodoTool {
                             },
                             "group": {
                                 "type": "string",
-                                "description": "Optional group label; one group per coherent goal, new direction = new group. Omit for flat list."
+                                "description": "Optional group label as a Conventional Commits subject, e.g. 'fix(tui): tab title format'; it names the terminal tab. One group per coherent goal, new direction = new group. Omit for flat list."
                             },
                             "confidence": {
                                 "type": "string",

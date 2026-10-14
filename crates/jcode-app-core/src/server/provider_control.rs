@@ -402,6 +402,7 @@ fn send_model_changed_result(
                 context_window: Some(agent.provider_context_window() as u64),
                 error: None,
                 resolved_credential,
+                provider_oauth_email: None,
                 reasoning_effort,
             });
         }
@@ -421,6 +422,7 @@ fn send_model_changed_result(
                 context_window: Some(agent.provider_context_window() as u64),
                 error: Some(error.to_string()),
                 resolved_credential: None,
+                provider_oauth_email: None,
                 reasoning_effort: None,
             });
         }
@@ -442,6 +444,7 @@ fn apply_cycle_model(
             context_window: Some(agent.provider_context_window() as u64),
             error: Some("Model switching is not available for this provider.".to_string()),
             resolved_credential: None,
+            provider_oauth_email: None,
             reasoning_effort: None,
         });
         return;

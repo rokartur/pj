@@ -3,6 +3,12 @@
 ## Repository Scope
 
 - Jcode Desktop is in a separate repository.
+- pj is a fork of `1jehuang/jcode` with all telemetry removed. Nothing leaves
+  the machine: no usage events, crash reports, transcripts, feedback or
+  provider account emails. When syncing with upstream, keep
+  `jcode-telemetry-core`, `telemetry-worker/`, `TELEMETRY.md` and
+  `src/cli/telemetry.rs` deleted. Drop any new `crate::telemetry` call site
+  upstream adds. Do not add the code back.
 
 ## Development Workflow
 

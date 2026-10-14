@@ -68,20 +68,21 @@ pub fn terminal_display_title_for_id(session_id: &str) -> Option<String> {
         })
 }
 
-/// pj's tab title: `<name> | pj` once the work has a name (an explicit rename,
-/// then the agent's todo/goal title), else `<directory> | pj`.
+/// pj's tab title: `<directory> | <name> | pj`, where the name is an explicit
+/// rename, then the agent's todo/goal title. Unnamed work drops the middle part.
 pub fn tab_title(name: Option<&str>, working_dir: Option<&str>) -> String {
-    let label = name
+    let dir = working_dir.and_then(|dir| {
+        let dir = std::path::Path::new(dir.trim_end_matches('/'));
+        Some(dir.file_name()?.to_string_lossy().into_owned())
+    });
+    let name = name
         .and_then(normalized_display_title)
-        .map(|name| truncate_chars(&name, 48))
-        .or_else(|| {
-            let dir = std::path::Path::new(working_dir?.trim_end_matches('/'));
-            Some(dir.file_name()?.to_string_lossy().into_owned())
-        });
-    let title = match label {
-        Some(label) => format!("{label} | pj"),
-        None => "pj".to_string(),
-    };
+        .map(|name| truncate_chars(&name, 48));
+    let title = [dir, name, Some("pj".to_string())]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" | ");
     crate::output_style::terminal_text(&title).into_owned()
 }
 
@@ -219,13 +220,14 @@ mod tests {
     }
 
     #[test]
-    fn tab_title_is_the_directory_until_the_work_has_a_name() {
+    fn tab_title_is_directory_then_name_then_pj() {
         assert_eq!(tab_title(None, Some("/Users/me/Developer/pj/")), "pj | pj");
         assert_eq!(tab_title(Some("  "), Some("/repo/api")), "api | pj");
         assert_eq!(
-            tab_title(Some("Fix the footer"), Some("/repo/api")),
-            "Fix the footer | pj"
+            tab_title(Some("fix: footer overlap"), Some("/repo/api")),
+            "api | fix: footer overlap | pj"
         );
+        assert_eq!(tab_title(Some("fix: footer"), Some("/")), "fix: footer | pj");
         assert_eq!(tab_title(None, Some("/")), "pj");
     }
 

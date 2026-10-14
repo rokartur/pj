@@ -25,6 +25,7 @@ use tokio::sync::{Mutex, RwLock};
 const ATTACH_MODEL_PREFETCH_DEBOUNCE_SECS: u64 = 15;
 const RELOAD_RESTORE_MARKER_MAX_AGE: Duration = Duration::from_secs(60);
 
+
 fn optional_token_usage_totals(totals: TokenUsageTotals) -> Option<TokenUsageTotals> {
     (totals.messages_with_token_usage > 0).then_some(totals)
 }
@@ -307,6 +308,7 @@ pub(super) async fn handle_get_model_catalog(
         status_detail: None,
         upstream_provider: None,
         resolved_credential,
+        provider_oauth_email: None,
         reasoning_effort,
         // Catalog replies still use History, so the TUI applies this field as
         // authoritative. Omitting it falsely turns off /fast status and its badge.
@@ -628,6 +630,7 @@ async fn send_history_from_persisted_session(
         status_detail: None,
         upstream_provider: None,
         resolved_credential: provider.active_resolved_credential(),
+        provider_oauth_email: None,
         reasoning_effort,
         // The transcript is persisted, but the tier is live provider state and
         // can be read without waiting for the busy agent's mutex.
@@ -880,6 +883,7 @@ async fn send_history_with_guard(
         status_detail,
         upstream_provider,
         resolved_credential,
+        provider_oauth_email: None,
         reasoning_effort,
         service_tier,
         compaction_mode,

@@ -35,7 +35,7 @@ use crate::auth;
 use crate::message::{Message, ToolDefinition};
 use account_failover::{
     account_usage_probe, active_account_label_for_provider, maybe_annotate_limit_summary,
-    same_provider_account_candidates, same_provider_account_failover_enabled,
+    same_provider_account_failover_enabled,
 };
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -2224,6 +2224,20 @@ impl Provider for MultiProvider {
 
     fn oauth_account_label(&self) -> Option<String> {
         self.selected_account_for_provider(self.active_provider())
+    }
+
+    fn active_oauth_account_email(&self) -> Option<String> {
+        let runtime = match self.active_provider() {
+            ActiveProvider::Claude => self.anthropic_provider(),
+            ActiveProvider::OpenAI => self.openai_provider(),
+            ActiveProvider::Copilot => self.copilot_provider(),
+            ActiveProvider::Antigravity => self.antigravity_provider(),
+            ActiveProvider::Gemini => self.gemini_provider(),
+            ActiveProvider::Cursor => self.cursor_provider(),
+            ActiveProvider::Bedrock => self.bedrock_provider().map(|p| p as Arc<dyn Provider>),
+            ActiveProvider::OpenRouter => self.active_openrouter_execution_provider(),
+        }?;
+        runtime.active_oauth_account_email()
     }
 
     fn set_oauth_account(&self, label: Option<&str>) -> Result<()> {

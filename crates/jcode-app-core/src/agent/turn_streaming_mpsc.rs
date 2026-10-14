@@ -277,6 +277,7 @@ impl Agent {
             // model. Compare against this after the stream so we can emit a
             // `ModelChanged` and resync the UI/context-limit.
             let model_at_request_start = provider.model().to_string();
+            let credential_at_request_start = provider.active_resolved_credential();
             let resume_session_id = self.provider_session_id.clone();
             self.last_status_detail = None;
             let kv_request = kv_cache_request_event(
@@ -1227,7 +1228,6 @@ impl Agent {
             // context budget all reflect the model that actually served.
             let model_after_stream = self.provider.model();
             if model_after_stream != model_at_request_start {
-                let provider_name = self.provider.display_name();
                 logging::warn(&format!(
                     "Provider switched model mid-request: '{}' -> '{}' (resyncing session/UI)",
                     model_at_request_start, model_after_stream
@@ -1239,13 +1239,19 @@ impl Agent {
                     },
                 );
                 self.persist_session_best_effort("model fallback");
+            }
+            let credential_after_stream = self.provider.active_resolved_credential();
+            if model_after_stream != model_at_request_start
+                || credential_after_stream != credential_at_request_start
+            {
                 let _ = event_tx.send(ServerEvent::ModelChanged {
                     id: 0,
                     model: model_after_stream,
-                    provider_name: Some(provider_name),
+                    provider_name: Some(self.provider.display_name()),
                     context_window: Some(self.provider.context_window() as u64),
                     error: None,
-                    resolved_credential: self.provider.active_resolved_credential(),
+                    resolved_credential: credential_after_stream,
+                    provider_oauth_email: None,
                     reasoning_effort: self.provider.reasoning_effort(),
                 });
             }
