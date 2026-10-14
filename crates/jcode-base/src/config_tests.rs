@@ -1120,12 +1120,12 @@ fn test_env_override_native_scrollbars() {
 }
 
 #[test]
-fn test_removed_pinned_diff_mode_falls_back_inline() {
+fn test_removed_pinned_diff_mode_falls_back_to_default() {
     let cfg: Config = toml::from_str(
         "[display]\ndiff_mode = 'pinned'\ndiff_line_wrap = false\ncentered = true\n",
     )
     .expect("legacy pinned diff settings must not invalidate the config");
-    assert_eq!(cfg.display.diff_mode, DiffDisplayMode::Inline);
+    assert_eq!(cfg.display.diff_mode, DiffDisplayMode::default());
     assert!(cfg.display.centered, "unrelated settings must survive");
 }
 
@@ -1137,7 +1137,7 @@ fn test_env_override_removed_pinned_diff_mode_is_ignored() {
         crate::env::set_var("JCODE_DIFF_MODE", removed);
         let mut cfg = Config::default();
         cfg.apply_env_overrides();
-        assert_eq!(cfg.display.diff_mode, DiffDisplayMode::Inline);
+        assert_eq!(cfg.display.diff_mode, DiffDisplayMode::default());
 
         cfg.display.diff_mode = DiffDisplayMode::File;
         cfg.apply_env_overrides();

@@ -67,10 +67,10 @@ impl SessionPickerResumeAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiffDisplayMode {
-    /// Don't show diffs at all.
-    Off,
-    /// Show diffs inline in the chat (default).
+    /// Don't show diffs at all (pj default: the edit row stays a single line).
     #[default]
+    Off,
+    /// Show diffs inline in the chat.
     Inline,
     /// Show the full inline diff in the chat without preview truncation.
     #[serde(

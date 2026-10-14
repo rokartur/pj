@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DisplayConfig {
-    /// How to display file diffs (off/inline/full-inline/file, default: inline)
+    /// How to display file diffs (off/inline/full-inline/file, default: off)
     #[serde(deserialize_with = "crate::serde_lenient::lenient_enum")]
     pub diff_mode: DiffDisplayMode,
     /// Legacy: "show_diffs = true/false" maps to diff_mode inline/off

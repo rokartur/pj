@@ -153,8 +153,8 @@ timeout_secs = 90
 # global_devices = []
 
 [display]
-# Diff display mode: "off", "inline" (default), "full-inline", or "file"
-diff_mode = "inline"
+# Diff display mode: "off" (default), "inline", "full-inline", or "file"
+diff_mode = "off"
 
 # Center all content by default (default: false)
 centered = false
