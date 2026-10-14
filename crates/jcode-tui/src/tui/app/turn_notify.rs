@@ -1,10 +1,9 @@
-//! Desktop notification for completed long agent turns.
+//! Desktop notification for completed agent turns.
 //!
-//! When a turn finishes after a configurable duration (lower threshold when
-//! the session has todos, since those indicate task-style work), the user gets
-//! a compact desktop notification: session name + duration in the title, todo
-//! progress and a short snippet of the final assistant text in the body. By
-//! default it fires only while the terminal window is unfocused.
+//! When a turn finishes (optionally only after a configurable duration), the
+//! user gets a compact desktop notification: session name + duration in the
+//! title, todo progress and a short snippet of the final assistant text in the
+//! body. By default it fires only while the terminal window is unfocused.
 
 use super::App;
 use crate::todo::TodoItem;
@@ -48,7 +47,7 @@ impl App {
             cfg.turn_complete_todo_min_secs
                 .min(cfg.turn_complete_min_secs)
         };
-        if (duration as u64) < threshold.max(1) {
+        if duration < threshold as f32 {
             return;
         }
 

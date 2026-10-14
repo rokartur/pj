@@ -1557,14 +1557,13 @@ impl Default for AmbientConfig {
 #[serde(default)]
 pub struct NotificationsConfig {
     /// Send a desktop notification when an agent turn completes (default: true).
-    /// Notifications fire only for long turns (see thresholds below) and, by
-    /// default, only while the terminal window is unfocused.
+    /// By default every turn notifies, only while the terminal window is unfocused.
     pub turn_complete: bool,
     /// Minimum turn duration, in seconds, before a completed turn notifies
-    /// (default: 120).
+    /// (default: 0, every turn).
     pub turn_complete_min_secs: u64,
     /// Lower duration threshold, in seconds, used when the session has todos
-    /// recorded, since todos indicate longer task-style work (default: 30).
+    /// recorded (default: 0).
     pub turn_complete_todo_min_secs: u64,
     /// Only notify while the terminal window is unfocused (default: true).
     /// Requires a terminal that reports focus events (most modern terminals).
@@ -1579,8 +1578,8 @@ impl Default for NotificationsConfig {
     fn default() -> Self {
         Self {
             turn_complete: true,
-            turn_complete_min_secs: 120,
-            turn_complete_todo_min_secs: 30,
+            turn_complete_min_secs: 0,
+            turn_complete_todo_min_secs: 0,
             turn_complete_only_when_unfocused: true,
             turn_complete_sound: "Glass".to_string(),
         }

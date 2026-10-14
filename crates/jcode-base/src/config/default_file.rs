@@ -619,16 +619,14 @@ swarm_stall_after_secs = 600
 # notify-send. Separate from [safety], which covers ambient-mode
 # ntfy/email/channel notifications.
 #
-# Notify when an agent turn finishes. Fires only for long turns and, by
-# default, only while the terminal window is unfocused. The notification is a
-# compact summary: session name, duration, todo progress, and a snippet of the
-# final assistant message.
+# Notify as soon as an agent turn finishes, by default only while the terminal
+# window is unfocused. The notification is a compact summary: session name,
+# duration, todo progress, and a snippet of the final assistant message.
 # turn_complete = true
-# Minimum turn duration (seconds) before notifying (default: 120)
-# turn_complete_min_secs = 120
-# Lower threshold (seconds) when the session has todos, since todos indicate
-# task-style work worth reporting sooner (default: 30)
-# turn_complete_todo_min_secs = 30
+# Minimum turn duration (seconds) before notifying (default: 0, every turn)
+# turn_complete_min_secs = 0
+# Lower threshold (seconds) when the session has todos (default: 0)
+# turn_complete_todo_min_secs = 0
 # Only notify while the terminal window is unfocused (default: true)
 # turn_complete_only_when_unfocused = true
 # macOS Notification Center sound played on completion (e.g. "Glass", "Ping",
