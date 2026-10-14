@@ -15,6 +15,7 @@ name = "jcode_app_core"
 path = "src/lib.rs"
 
 [dependencies]
+pj-ext = { path = "../pj-ext" }
 # NOTE: the jemalloc allocator stats live in `jcode-base` (process_memory) and
 # local embeddings live in `jcode-base` (embedding); this crate forwards those
 # features to jcode-base rather than depending on the backing crates directly.

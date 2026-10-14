@@ -1,0 +1,21 @@
+[package]
+name = "pj-ext"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "pj_ext"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+glob = "0.3"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+similar = "2"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

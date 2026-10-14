@@ -702,7 +702,8 @@ fn build_detached_shell_wrapper(command: &str) -> StdCommand {
     cmd
 }
 
-fn format_command_output(mut output: String, exit_code: Option<i32>) -> String {
+fn format_command_output(output: String, exit_code: Option<i32>) -> String {
+    let mut output = pj::compact_output(output);
     if output.len() > MAX_OUTPUT_LEN {
         output = truncate_str(&output, MAX_OUTPUT_LEN).to_string();
         output.push_str("\n... (output truncated)");
@@ -727,10 +728,13 @@ mod utf8_truncation_tests {
 
     #[test]
     fn format_command_output_truncates_on_utf8_boundary() {
-        let input = format!("{}é", "a".repeat(29_999));
+        // pj's rtk output cap (12000 chars by default) applies before jcode's 30000 cap.
+        let input = format!("{}é", "a".repeat(11_999));
         let output = format_command_output(input, None);
-        assert!(output.ends_with("\n... (output truncated)"));
-        assert!(output.starts_with(&"a".repeat(29_999)));
+        assert_eq!(
+            output,
+            format!("{}\n... (output truncated)", "a".repeat(11_999))
+        );
     }
 
     #[cfg(windows)]
@@ -856,6 +860,8 @@ where
 #[path = "bash_destructive_gate.rs"]
 mod destructive_gate;
 use destructive_gate::destructive_command_refusal;
+#[path = "bash_pj.rs"]
+mod pj;
 #[async_trait]
 impl Tool for BashTool {
     fn name(&self) -> &str {
@@ -885,6 +891,9 @@ impl Tool for BashTool {
             ctx.working_dir.clone(),
         ) {
             return Err(anyhow::anyhow!(refusal));
+        }
+        if let Some(rewritten) = pj::prepare_command(&params.command).await? {
+            params.command = rewritten;
         }
 
         #[cfg(unix)]
@@ -926,7 +935,7 @@ impl Tool for BashTool {
 }
 
 const FILE_EDIT_HINT: &str = "Note: this command edits files in place. Next time use `edit` \
-(exact replacements, all-or-nothing, pass `edits` for several), `replace` (regex or multi-file, \
+(exact replacements, all-or-nothing, pass `edits` for several), `replace_all` (regex or multi-file, \
 with expected_count), or `apply_patch` (multi-file patches). They fail loudly on a missed match \
 instead of silently writing nothing, and show a reviewable diff.";
 

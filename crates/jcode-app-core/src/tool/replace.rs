@@ -100,7 +100,7 @@ struct FileChange {
 #[async_trait]
 impl Tool for ReplaceTool {
     fn name(&self) -> &str {
-        "replace"
+        "replace_all"
     }
 
     fn description(&self) -> &str {

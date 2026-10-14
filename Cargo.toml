@@ -95,6 +95,7 @@ members = [
     "crates/jcode-companion",
     "crates/jcode-tui-workspace",
     "crates/jcode-render-core",
+    "crates/pj-ext",
 ]
 
 [lib]
@@ -210,6 +211,7 @@ jcode-provider-anthropic-runtime = { path = "crates/jcode-provider-anthropic-run
 jcode-provider-openai-runtime = { path = "crates/jcode-provider-openai-runtime" }
 jcode-provider-grok-build-runtime = { path = "crates/jcode-provider-grok-build-runtime" }
 jcode-selfdev-types = { path = "crates/jcode-selfdev-types" }
+pj-ext = { path = "crates/pj-ext" }
 
 # Archive extraction (for auto-update)
 tempfile = "3"

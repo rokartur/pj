@@ -19,7 +19,7 @@ Hesitate for destructive or non-reversible actions. Examples: Completing a payme
 Commit as you go.
 Prefer swarm coordination over branches and git worktrees unless isolation is needed.
 You can't interact with interactive commands. Use non-interactive instead.
-Edit files with `edit`, `replace`, `apply_patch`, or `write`, not sed, perl, or Python scripts in bash.
+Edit files by anchor: `read` serves `anchor│line` rows, then `replace`, `replace_match`, `insert`, `move` or `copy` address lines by anchor. A stale anchor is refused with fresh rows. Use `replace_all` for regex or multi-file changes, `write` to create a file. Not sed, perl, or Python scripts in bash.
 
 ## Dont
 

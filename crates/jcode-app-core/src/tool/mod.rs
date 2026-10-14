@@ -1,6 +1,9 @@
+mod add_directory;
 mod agentgrep;
 pub mod ambient;
+pub mod applet;
 mod apply_patch;
+mod ask_user_question;
 mod bash;
 mod batch;
 mod bg;
@@ -14,6 +17,7 @@ mod compile_remote;
 #[cfg(target_os = "macos")]
 mod computer;
 mod config_edit_notice;
+mod context_tree_query;
 mod conversation_search;
 mod debug_socket;
 mod desktop_selfdev;
@@ -23,11 +27,10 @@ mod edit;
 mod edit_stats;
 mod file_diff;
 pub(crate) mod file_lock;
+mod file_search;
 mod gmail;
-// The initiative tool is intentionally unregistered (4928a1c92) but kept for re-enable.
-pub mod applet;
-#[allow(dead_code)]
 mod goal;
+mod hashline;
 pub mod inflight;
 mod invalid;
 mod jcode_docs;
@@ -391,7 +394,22 @@ impl Registry {
             Self::insert_tool_timed(&mut m, &mut timings, "edit", edit::EditTool::new);
             // `multiedit` merged into `edit`, and `patch` into `apply_patch`.
             // Both old names still resolve through `resolve_tool_name`.
-            Self::insert_tool_timed(&mut m, &mut timings, "replace", replace::ReplaceTool::new);
+            Self::insert_tool_timed(
+                &mut m,
+                &mut timings,
+                "replace_all",
+                replace::ReplaceTool::new,
+            );
+            Self::insert_tool_timed(&mut m, &mut timings, "replace", || hashline::ReplaceTool);
+            Self::insert_tool_timed(&mut m, &mut timings, "replace_match", || {
+                hashline::ReplaceMatchTool
+            });
+            Self::insert_tool_timed(&mut m, &mut timings, "insert", || hashline::InsertTool);
+            Self::insert_tool_timed(&mut m, &mut timings, "move", || hashline::MoveTool);
+            Self::insert_tool_timed(&mut m, &mut timings, "copy", || hashline::CopyTool);
+            Self::insert_tool_timed(&mut m, &mut timings, "undo_last_change", || {
+                hashline::UndoTool
+            });
             Self::insert_tool_timed(
                 &mut m,
                 &mut timings,
@@ -399,6 +417,17 @@ impl Registry {
                 apply_patch::ApplyPatchTool::new,
             );
             Self::insert_tool_timed(&mut m, &mut timings, "ls", ls::LsTool::new);
+            Self::insert_tool_timed(&mut m, &mut timings, "ask_user_question", || {
+                ask_user_question::AskUserQuestionTool
+            });
+            Self::insert_tool_timed(&mut m, &mut timings, "add_directory", || {
+                add_directory::AddDirectoryTool
+            });
+            Self::insert_tool_timed(&mut m, &mut timings, "context_tree_query", || {
+                context_tree_query::ContextTreeQueryTool
+            });
+            Self::insert_tool_timed(&mut m, &mut timings, "fd", || file_search::FdTool);
+            Self::insert_tool_timed(&mut m, &mut timings, "rg", || file_search::RgTool);
             Self::insert_tool_timed(&mut m, &mut timings, "bash", bash::BashTool::new);
             Self::insert_tool_timed(
                 &mut m,
@@ -443,8 +472,12 @@ impl Registry {
                 session_search::SessionSearchTool::new,
             );
             Self::insert_tool_timed(&mut m, &mut timings, "memory", memory::MemoryTool::new);
-            // Initiative is temporarily unavailable. Keep its implementation and
-            // saved data intact so it can be restored without a migration.
+            Self::insert_tool_timed(
+                &mut m,
+                &mut timings,
+                "initiative",
+                goal::InitiativeTool::new,
+            );
             Self::insert_tool_timed(&mut m, &mut timings, "gmail", gmail::GmailTool::new);
             Self::insert_tool_timed(
                 &mut m,

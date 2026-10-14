@@ -583,6 +583,27 @@ pub struct Config {
     /// them verbatim so a CLI settings save never wipes Desktop preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub desktop: Option<toml::Table>,
+
+    /// pj: `[pj.*]` tables owned by pj-ext, round-tripped like `desktop`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pj: Option<toml::Table>,
+}
+
+impl Config {
+    /// Typed view of one `[pj.<name>]` table. A missing table yields the default;
+    /// a malformed one is logged and also yields the default, like other config errors.
+    pub fn pj_section<T: serde::de::DeserializeOwned + Default>(&self, name: &str) -> T {
+        let Some(value) = self.pj.as_ref().and_then(|pj| pj.get(name)) else {
+            return T::default();
+        };
+        match value.clone().try_into() {
+            Ok(section) => section,
+            Err(error) => {
+                crate::logging::warn(&format!("[pj.{name}] ignored: {error}"));
+                T::default()
+            }
+        }
+    }
 }
 
 /// Controls who owns autonomous wake execution.

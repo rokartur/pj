@@ -429,7 +429,8 @@ fn tool_use_step(block: &ContentBlock) -> Option<String> {
                 .map(|path| format!("Inspected `{}`", path.trim()))
                 .unwrap_or_else(|| "Inspected files".to_string()),
         ),
-        "edit" | "multiedit" | "write" | "patch" | "apply_patch" | "replace" => Some(
+        "edit" | "multiedit" | "write" | "patch" | "apply_patch" | "replace" | "replace_all"
+        | "replace_match" | "insert" | "move" | "copy" | "undo_last_change" => Some(
             obj.and_then(|map| map.get("file_path").and_then(|v| v.as_str()))
                 .map(|path| format!("Updated `{}`", path.trim()))
                 .unwrap_or_else(|| "Edited files".to_string()),

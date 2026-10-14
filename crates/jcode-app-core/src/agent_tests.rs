@@ -949,6 +949,52 @@ async fn messages_for_provider_replays_persisted_native_compaction_in_auto_mode(
 }
 
 #[tokio::test]
+async fn messages_for_provider_swaps_condensed_tool_results_for_their_stubs() {
+    let _env = crate::storage::lock_test_env();
+    let home = tempfile::tempdir().expect("temp home");
+    let previous = std::env::var_os("JCODE_HOME");
+    // SAFETY: env mutation is serialized by lock_test_env; restored below.
+    unsafe { std::env::set_var("JCODE_HOME", home.path()) };
+
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = Agent::new(provider, registry);
+    agent.add_message(
+        Role::User,
+        vec![ContentBlock::ToolResult {
+            tool_use_id: "call_1".to_string(),
+            content: "raw output".to_string(),
+            is_error: None,
+        }],
+    );
+    agent
+        .condense
+        .ready
+        .lock()
+        .unwrap()
+        .push(("call_1".to_string(), "summary".to_string()));
+
+    let (messages, _) = agent.messages_for_provider();
+    let stub = messages
+        .iter()
+        .flat_map(|message| &message.content)
+        .find_map(|block| match block {
+            ContentBlock::ToolResult { content, .. } => Some(content.as_str()),
+            _ => None,
+        });
+    assert_eq!(stub, Some("summary"));
+    let stored = agent.session.messages.iter().flat_map(|message| &message.content).any(
+        |block| matches!(block, ContentBlock::ToolResult { content, .. } if content == "raw output"),
+    );
+    assert!(stored, "the transcript keeps the original");
+
+    match previous {
+        // SAFETY: still under lock_test_env.
+        Some(value) => unsafe { std::env::set_var("JCODE_HOME", value) },
+        None => unsafe { std::env::remove_var("JCODE_HOME") },
+    }
+}
+#[tokio::test]
 async fn oversized_openai_native_compaction_is_persisted_as_text_fallback() {
     let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
     let registry = Registry::new(provider.clone()).await;

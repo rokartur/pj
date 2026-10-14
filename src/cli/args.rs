@@ -290,6 +290,9 @@ pub(crate) enum Command {
         json: bool,
     },
 
+    /// Import the pi agent config (~/.pi/agent) into ~/.pj, on top of ~/.jcode/config.toml
+    ImportPi,
+
     /// Show usage limits for connected providers
     Usage {
         /// Emit JSON instead of plain text

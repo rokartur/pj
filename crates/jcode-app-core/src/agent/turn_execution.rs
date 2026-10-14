@@ -57,6 +57,7 @@ impl Agent {
         // `jcode run` uses this path, so headless turns fire the same
         // lifecycle hooks as streaming turns (docs/HOOKS.md).
         self.fire_turn_end_hook(&result, turn_started_at, start_message_index);
+        self.condense_turn(start_message_index);
         result
     }
 
@@ -167,6 +168,7 @@ impl Agent {
         let result = self.run_turn_streaming_mpsc(event_tx).await;
         self.current_turn_system_reminder = None;
         self.fire_turn_end_hook(&result, turn_started_at, start_message_index);
+        self.condense_turn(start_message_index);
         result
     }
 

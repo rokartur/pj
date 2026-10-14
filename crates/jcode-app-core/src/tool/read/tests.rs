@@ -208,27 +208,27 @@ async fn read_tool_supports_start_line_and_end_line() {
         .expect("read execution should succeed");
 
     assert!(
-        output.output.contains("2\ttwo"),
+        output.output.contains("│two\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        output.output.contains("3\tthree"),
+        output.output.contains("│three\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        output.output.contains("4\tfour"),
+        output.output.contains("│four\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        !output.output.contains("1\tone"),
+        !output.output.contains("│one\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        !output.output.contains("5\tfive"),
+        !output.output.contains("│five\n"),
         "output={:?}",
         output.output
     );
@@ -280,17 +280,17 @@ async fn read_tool_supports_start_line_with_limit() {
         .expect("read execution should succeed");
 
     assert!(
-        output.output.contains("2\ttwo"),
+        output.output.contains("│two\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        output.output.contains("3\tthree"),
+        output.output.contains("│three\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        !output.output.contains("4\tfour"),
+        !output.output.contains("│four\n"),
         "output={:?}",
         output.output
     );
@@ -322,17 +322,17 @@ async fn read_tool_prefers_end_line_over_limit() {
         .expect("read execution should succeed");
 
     assert!(
-        output.output.contains("2\ttwo"),
+        output.output.contains("│two\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        output.output.contains("3\tthree"),
+        output.output.contains("│three\n"),
         "output={:?}",
         output.output
     );
     assert!(
-        !output.output.contains("4\tfour"),
+        !output.output.contains("│four\n"),
         "output={:?}",
         output.output
     );

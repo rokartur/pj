@@ -300,6 +300,16 @@ impl SkillRegistry {
         Ok(overlay)
     }
 
+    /// pj: skills of a directory added with `add_directory`: pi-add-dir's
+    /// `.pi/skills`, `.agents/skills`, `.claude/skills`, plus jcode's `.jcode/skills`.
+    pub fn load_external_dir(dir: &Path) -> Result<Self> {
+        let mut registry = Self::default();
+        for name in [".pi", ".agents", ".claude", ".jcode"] {
+            registry.load_from_dir(&dir.join(name).join("skills"))?;
+        }
+        Ok(registry)
+    }
+
     /// Merge a project-local overlay into this registry. Overlay skills win
     /// over same-named global skills, mirroring the historical load order
     /// (project dirs loaded last).

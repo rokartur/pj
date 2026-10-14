@@ -1851,8 +1851,11 @@ fn tool_title(name: &str) -> String {
         "bash" => "Running shell command".to_string(),
         "read" => "Reading file".to_string(),
         "write" => "Writing file".to_string(),
-        "edit" | "multiedit" | "patch" | "apply_patch" | "replace" => "Editing files".to_string(),
-        "agentgrep" | "grep" | "glob" | "ls" => "Searching workspace".to_string(),
+        "edit" | "multiedit" | "patch" | "apply_patch" | "replace" | "replace_all"
+        | "replace_match" | "insert" | "move" | "copy" | "undo_last_change" => {
+            "Editing files".to_string()
+        }
+        "agentgrep" | "fd" | "rg" | "grep" | "glob" | "ls" => "Searching workspace".to_string(),
         "webfetch" | "websearch" => "Fetching web content".to_string(),
         other => other.replace('_', " "),
     }
@@ -1861,9 +1864,17 @@ fn tool_title(name: &str) -> String {
 pub(crate) fn tool_kind(name: &str) -> &'static str {
     match name {
         "read" => "read",
-        "write" | "edit" | "multiedit" | "patch" | "apply_patch" | "replace" => "edit",
+        "write" | "edit" | "multiedit" | "patch" | "apply_patch" | "replace" | "replace_all"
+        | "replace_match" | "insert" | "move" | "copy" | "undo_last_change" => "edit",
         "bash" | "bg" | "selfdev" => "execute",
-        "agentgrep" | "grep" | "glob" | "ls" | "session_search" | "conversation_search" => "search",
+        "agentgrep"
+        | "fd"
+        | "rg"
+        | "grep"
+        | "glob"
+        | "ls"
+        | "session_search"
+        | "conversation_search" => "search",
         "webfetch" | "websearch" | "codesearch" => "fetch",
         _ => "other",
     }

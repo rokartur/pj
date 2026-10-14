@@ -1,6 +1,7 @@
 #![cfg_attr(test, allow(clippy::await_holding_lock))]
 
 mod compaction;
+mod condense;
 mod environment;
 mod inline_tail;
 mod interrupts;
@@ -307,6 +308,7 @@ pub struct Agent {
     graceful_shutdown: InterruptSignal,
     /// Client-side cache tracking for detecting append-only violations
     cache_tracker: CacheTracker,
+    condense: condense::CondenseState,
     /// Classifies provider-reported KV cache misses for every client.
     kv_cache_monitor: crate::kv_cache_monitor::KvCacheMonitor,
     /// Last token usage from API request (for debug socket queries)
@@ -452,6 +454,7 @@ impl Agent {
             background_tool_signal: InterruptSignal::new(),
             graceful_shutdown: InterruptSignal::new(),
             cache_tracker: CacheTracker::new(),
+            condense: condense::CondenseState::default(),
             kv_cache_monitor: Default::default(),
             last_usage: TokenUsage::default(),
             locked_tools: None,
@@ -809,6 +812,12 @@ impl Agent {
     }
 
     fn messages_for_provider(&mut self) -> (Vec<Message>, Option<CompactionEvent>) {
+        let (mut messages, event) = self.messages_for_provider_raw();
+        self.apply_condensed_stubs(&mut messages);
+        (messages, event)
+    }
+
+    fn messages_for_provider_raw(&mut self) -> (Vec<Message>, Option<CompactionEvent>) {
         if self.provider.supports_compaction() || self.session.compaction.is_some() {
             let compaction = self.registry.compaction();
             match compaction.try_write() {

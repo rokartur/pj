@@ -3351,6 +3351,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-user-notifications",
  "open",
+ "pj-ext",
  "ratatui",
  "reqwest 0.12.28",
  "rustls",
@@ -3428,6 +3429,7 @@ dependencies = [
  "jcode-tool-types",
  "jcode-update-core",
  "libc",
+ "pj-ext",
  "rand 0.9.3",
  "regex",
  "reqwest 0.12.28",
@@ -4398,6 +4400,7 @@ dependencies = [
  "jcode-voice",
  "libc",
  "open",
+ "pj-ext",
  "rand 0.9.3",
  "ratatui",
  "regex",
@@ -6087,6 +6090,20 @@ dependencies = [
  "atomic-waker",
  "fastrand",
  "futures-io",
+]
+
+[[package]]
+name = "pj-ext"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glob",
+ "regex",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]

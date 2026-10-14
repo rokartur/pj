@@ -371,6 +371,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         Some(Command::Version { json }) => {
             commands::run_version_command(json)?;
         }
+        Some(Command::ImportPi) => {
+            commands::run_import_pi_command()?;
+        }
         Some(Command::Usage { json }) => {
             commands::run_usage_command(json).await?;
         }

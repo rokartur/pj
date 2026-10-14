@@ -2152,6 +2152,23 @@ pub fn run_version_command(emit_json: bool) -> Result<()> {
     report_info::run_version_command(emit_json)
 }
 
+pub fn run_import_pi_command() -> Result<()> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
+    let report = pj_ext::import_pi::run(&pj_ext::import_pi::ImportPaths {
+        pi_dir: home.join(".pi").join("agent"),
+        jcode_dir: home.join(".jcode"),
+        pj_dir: storage::jcode_dir()?,
+    })?;
+    println!("Wrote {}", report.config.display());
+    if let Some(backup) = report.backup {
+        println!("Previous config saved as {}", backup.display());
+    }
+    for path in report.copied {
+        println!("Copied {}", path.display());
+    }
+    Ok(())
+}
+
 pub async fn run_usage_command(emit_json: bool) -> Result<()> {
     report_info::run_usage_command(emit_json).await
 }

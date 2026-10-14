@@ -34,7 +34,18 @@ pub fn canonical_tool_name(name: &str) -> &str {
 pub fn is_edit_tool_name(name: &str) -> bool {
     matches!(
         canonical_tool_name(name),
-        "write" | "edit" | "multiedit" | "patch" | "apply_patch" | "replace"
+        "write"
+            | "edit"
+            | "multiedit"
+            | "patch"
+            | "apply_patch"
+            | "replace"
+            | "replace_all"
+            | "replace_match"
+            | "insert"
+            | "move"
+            | "copy"
+            | "undo_last_change"
     )
 }
 

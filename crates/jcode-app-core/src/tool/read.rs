@@ -122,7 +122,7 @@ impl Tool for ReadTool {
     }
 
     fn description(&self) -> &str {
-        "Read a file. Supports text files, image files, and PDFs."
+        "Read text as `anchor│line` rows for anchor edits; also images and PDFs."
     }
 
     fn parameters_schema(&self) -> Value {
@@ -189,34 +189,25 @@ impl Tool for ReadTool {
         // Read file
         let content = tokio::fs::read_to_string(&path).await?;
 
-        // Single-pass: count lines while building output
+        let view = super::hashline::store().view(&path, &content);
+        let total_lines = view.doc.lines.len();
         let mut output = String::with_capacity(range.limit.min(2000) * 80);
-        let mut total_lines = 0usize;
         let mut truncated_line_count = 0usize;
         let end_exclusive = range.offset + range.limit;
+        for (line, anchor) in view
+            .doc
+            .lines
+            .iter()
+            .zip(&view.anchors)
+            .take(end_exclusive)
+            .skip(range.offset)
         {
-            use std::fmt::Write;
-            for (i, line) in content.lines().enumerate() {
-                total_lines = i + 1;
-                if i < range.offset {
-                    continue;
-                }
-                if i >= end_exclusive {
-                    // Still need to count remaining lines
-                    continue;
-                }
-                let line_num = i + 1;
-                if line.len() > MAX_LINE_LEN {
-                    truncated_line_count += 1;
-                    let _ = writeln!(
-                        output,
-                        "{:>5}\t{}...",
-                        line_num,
-                        crate::util::truncate_str(line, MAX_LINE_LEN)
-                    );
-                } else {
-                    let _ = writeln!(output, "{:>5}\t{}", line_num, line);
-                }
+            if line.len() > MAX_LINE_LEN {
+                truncated_line_count += 1;
+                let shown = crate::util::truncate_str(line, MAX_LINE_LEN);
+                output.push_str(&format!("{anchor}│{shown}...\n"));
+            } else {
+                output.push_str(&format!("{anchor}│{line}\n"));
             }
         }
 

@@ -1705,17 +1705,16 @@ async fn test_single_output_ceiling_is_absolute_not_only_proportional() {
 }
 
 #[tokio::test]
-async fn initiative_is_not_registered_or_advertised() {
+async fn initiative_is_registered_and_advertised() {
     let registry = Registry::new(Arc::new(MockProvider)).await;
     let names = registry.tool_names().await;
-    assert!(names.iter().any(|name| name == "todo"));
-    assert!(!names.iter().any(|name| name == "initiative"));
+    assert!(names.iter().any(|name| name == "initiative"));
     assert!(
         registry
             .definitions(None)
             .await
             .iter()
-            .all(|definition| definition.name != "initiative")
+            .any(|definition| definition.name == "initiative")
     );
 }
 
@@ -1832,7 +1831,7 @@ async fn only_the_known_open_world_tools_are_ineligible_for_openai_strict_mode()
     /// Built-ins that legitimately cannot be strict. Verified against master
     /// before the #711/#713 eligibility changes, so this is pre-existing.
     // applet's view is a recursive, open-ended node tree.
-    const KNOWN_OPEN_WORLD_TOOLS: &[&str] = &["applet", "batch", "browser", "swarm"];
+    const KNOWN_OPEN_WORLD_TOOLS: &[&str] = &["applet", "batch", "browser", "initiative", "swarm"];
 
     let provider: Arc<dyn Provider> = Arc::new(MockProvider);
     let registry = Registry::new(provider).await;
