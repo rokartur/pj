@@ -1219,6 +1219,12 @@ pub struct App {
     // Modal in-app selection/copy state for the chat viewport.
     copy_selection_mode: bool,
     copy_selection_anchor: Option<crate::tui::CopySelectionPoint>,
+    copy_selection_last_click: Option<(Instant, crate::tui::CopySelectionPoint)>,
+    /// Word picked by a double-click; a following drag extends by whole words from it.
+    copy_selection_word_anchor: Option<(
+        crate::tui::CopySelectionPoint,
+        crate::tui::CopySelectionPoint,
+    )>,
     copy_selection_cursor: Option<crate::tui::CopySelectionPoint>,
     copy_selection_pending_anchor: Option<crate::tui::CopySelectionPoint>,
     copy_selection_dragging: bool,

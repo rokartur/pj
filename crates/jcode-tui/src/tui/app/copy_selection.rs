@@ -4,6 +4,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 impl App {
     const COPY_VIEWPORT_CONTEXT_LINES: usize = 4;
+    const DOUBLE_CLICK_WINDOW: std::time::Duration = std::time::Duration::from_millis(400);
 
     pub(super) fn enter_copy_selection_mode(&mut self) {
         self.copy_selection_mode = true;
@@ -20,6 +21,7 @@ impl App {
         self.copy_selection_anchor = None;
         self.copy_selection_cursor = None;
         self.copy_selection_goal_column = None;
+        self.copy_selection_word_anchor = None;
         // A re-entered drag at the same pane and edge must not skip its nudge.
         self.copy_selection_edge_autoscroll = None;
     }
@@ -475,7 +477,7 @@ impl App {
         }
         // Extend the selection to the current edge line, then scroll once more.
         if let Some(point) = crate::tui::ui::copy_pane_autoscroll_edge_point(pane, upward) {
-            self.update_selection_with_point(point, true);
+            self.drag_selection_to(point);
         }
         self.step_copy_selection_scroll(pane, upward)
     }
@@ -516,6 +518,70 @@ impl App {
         true
     }
 
+    fn is_double_click(&self, point: crate::tui::CopySelectionPoint) -> bool {
+        self.copy_selection_last_click
+            .is_some_and(|(at, last)| last == point && at.elapsed() < Self::DOUBLE_CLICK_WINDOW)
+    }
+
+    fn select_word(
+        &mut self,
+        (start, end): (
+            crate::tui::CopySelectionPoint,
+            crate::tui::CopySelectionPoint,
+        ),
+    ) {
+        self.copy_selection_last_click = None;
+        self.copy_selection_pending_anchor = None;
+        self.copy_selection_dragging = true;
+        self.copy_selection_word_anchor = Some((start, end));
+        self.note_copy_selection_activity(start.pane);
+        self.copy_selection_anchor = Some(start);
+        self.copy_selection_cursor = Some(end);
+        self.copy_selection_goal_column = Some(end.column);
+    }
+
+    /// Extend the drag to `point`; after a double-click, snap both ends to whole words.
+    fn drag_selection_to(&mut self, point: crate::tui::CopySelectionPoint) {
+        let Some((word_start, word_end)) = self.copy_selection_word_anchor else {
+            self.update_selection_with_point(point, true);
+            return;
+        };
+        let Some(point) = Self::clamp_point(point) else {
+            return;
+        };
+        // Blank gaps between words extend the selection to the pointer itself.
+        let (start, end) = Self::word_points_at(point).unwrap_or((point, point));
+        let (anchor, cursor) =
+            if (point.abs_line, point.column) < (word_start.abs_line, word_start.column) {
+                (word_end, start)
+            } else {
+                (word_start, end)
+            };
+        self.copy_selection_anchor = Some(anchor);
+        self.copy_selection_cursor = Some(cursor);
+        self.copy_selection_goal_column = Some(cursor.column);
+    }
+
+    fn word_points_at(
+        point: crate::tui::CopySelectionPoint,
+    ) -> Option<(
+        crate::tui::CopySelectionPoint,
+        crate::tui::CopySelectionPoint,
+    )> {
+        let text = Self::line_text(point.pane, point.abs_line)?;
+        let (start, end) = word_bounds(&text, point.column)?;
+        Some((
+            crate::tui::CopySelectionPoint {
+                column: start,
+                ..point
+            },
+            crate::tui::CopySelectionPoint {
+                column: end,
+                ..point
+            },
+        ))
+    }
+
     pub(super) fn handle_copy_selection_mouse(&mut self, mouse: MouseEvent) -> Option<bool> {
         self.handle_copy_selection_mouse_with(mouse, super::helpers::copy_to_clipboard)
     }
@@ -532,6 +598,15 @@ impl App {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 let point = point?;
+                // Double-clicking blank space (an image body, padding) stays a plain click.
+                if self.is_double_click(point)
+                    && let Some(word) = Self::word_points_at(point)
+                {
+                    self.select_word(word);
+                    return Some(false);
+                }
+                self.copy_selection_last_click = Some((std::time::Instant::now(), point));
+                self.copy_selection_word_anchor = None;
                 if self.copy_selection_mode {
                     self.copy_selection_dragging = true;
                     self.copy_selection_pending_anchor = None;
@@ -578,7 +653,7 @@ impl App {
                     && let Some((edge_point, upward)) =
                         crate::tui::ui::copy_pane_vertical_edge_point(pane, mouse.column, mouse.row)
                 {
-                    self.update_selection_with_point(edge_point, true);
+                    self.drag_selection_to(edge_point);
                     // Nudge once when the drag first enters the edge band (or
                     // flips direction). While it stays in the band the tick loop
                     // owns scrolling, so moving the cursor within the band cannot
@@ -599,7 +674,7 @@ impl App {
                     crate::tui::ui::copy_pane_drag_point(pane, mouse.column, mouse.row)
                 });
                 if let Some(point) = resolved.filter(|point| Some(point.pane) == active_pane) {
-                    self.update_selection_with_point(point, true);
+                    self.drag_selection_to(point);
                 }
                 Some(false)
             }
@@ -629,8 +704,9 @@ impl App {
                     crate::tui::ui::copy_pane_drag_point(pane, mouse.column, mouse.row)
                 });
                 if let Some(point) = resolved.filter(|point| Some(point.pane) == release_pane) {
-                    self.update_selection_with_point(point, true);
+                    self.drag_selection_to(point);
                 }
+                self.copy_selection_word_anchor = None;
                 if self.copy_selection_mode {
                     return Some(false);
                 }
@@ -677,5 +753,80 @@ impl App {
             }
             _ => None,
         }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CharClass {
+    Word,
+    Space,
+    Other,
+}
+
+fn char_class(ch: char) -> CharClass {
+    if ch.is_alphanumeric() || ch == '_' {
+        CharClass::Word
+    } else if ch.is_whitespace() {
+        CharClass::Space
+    } else {
+        CharClass::Other
+    }
+}
+
+/// Display-column span of the run of same-class characters under `column`,
+/// or `None` when the column is on whitespace or past the end of the line.
+fn word_bounds(text: &str, column: usize) -> Option<(usize, usize)> {
+    let mut cells: Vec<(usize, usize, CharClass)> = Vec::new();
+    let mut col = 0usize;
+    for ch in text.chars() {
+        let width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        // Zero-width marks belong to the character they combine with.
+        let class = match cells.last() {
+            Some(&(_, _, prev)) if width == 0 => prev,
+            _ => char_class(ch),
+        };
+        cells.push((col, col + width, class));
+        col += width;
+    }
+    let hit = cells
+        .iter()
+        .position(|&(start, end, _)| start <= column && column < end)?;
+    let class = cells[hit].2;
+    if class == CharClass::Space {
+        return None;
+    }
+    let mut lo = hit;
+    while lo > 0 && cells[lo - 1].2 == class {
+        lo -= 1;
+    }
+    let mut hi = hit;
+    while hi + 1 < cells.len() && cells[hi + 1].2 == class {
+        hi += 1;
+    }
+    Some((cells[lo].0, cells[hi].1))
+}
+
+#[cfg(test)]
+mod word_bounds_tests {
+    use super::word_bounds;
+
+    #[test]
+    fn picks_the_run_under_the_column() {
+        let text = "let foo_bar = baz();";
+        assert_eq!(word_bounds(text, 5), Some((4, 11)));
+        assert_eq!(word_bounds(text, 12), Some((12, 13)));
+        assert_eq!(word_bounds(text, 17), Some((17, 20)));
+    }
+
+    #[test]
+    fn counts_display_columns_for_wide_chars() {
+        assert_eq!(word_bounds("日本 abc", 1), Some((0, 4)));
+        assert_eq!(word_bounds("日本 abc", 6), Some((5, 8)));
+    }
+
+    #[test]
+    fn whitespace_and_past_line_end_are_not_words() {
+        assert_eq!(word_bounds("a  b", 1), None);
+        assert_eq!(word_bounds("abc", 10), None);
     }
 }

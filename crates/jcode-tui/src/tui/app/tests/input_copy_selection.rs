@@ -21,11 +21,7 @@ fn input_pane_screen_points(
     points
 }
 
-fn drag_copy(
-    app: &mut App,
-    start: (u16, u16),
-    end: (u16, u16),
-) -> String {
+fn drag_copy(app: &mut App, start: (u16, u16), end: (u16, u16)) -> String {
     let copied = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let copied_for_closure = copied.clone();
     app.handle_copy_selection_mouse_with(
@@ -58,7 +54,7 @@ fn drag_copy(
             true
         },
     );
-    
+
     copied.lock().unwrap().clone()
 }
 
@@ -99,12 +95,59 @@ fn test_input_composer_drag_selects_and_copies_typed_text() {
 
     let copied = drag_copy(&mut app, start, end);
     assert_eq!(copied, "select this draft");
-    assert_eq!(app.status_notice(), Some("Copied selection · highlight remains visible".to_string()));
+    assert_eq!(
+        app.status_notice(),
+        Some("Copied selection · highlight remains visible".to_string())
+    );
     // The highlight stays visible after copying (c7afd6620), but the drag ends.
     assert!(!app.copy_selection_mode);
     assert!(!app.copy_selection_dragging);
     assert!(app.copy_selection_anchor.is_some());
     assert!(app.copy_selection_cursor.is_some());
+}
+
+#[test]
+fn test_double_click_drag_extends_selection_by_whole_words() {
+    let _render_lock = scroll_render_test_lock();
+    let mut app = create_test_app();
+    app.input = "alpha beta gamma".to_string();
+    app.cursor_pos = app.input.len();
+    let backend = ratatui::backend::TestBackend::new(80, 24);
+    let mut terminal = ratatui::Terminal::new(backend).expect("failed to create test terminal");
+    render_and_snap(&app, &mut terminal);
+
+    let points = input_pane_screen_points(80, 24);
+    let cell_at = |column: usize| {
+        points
+            .iter()
+            .find(|(_, _, p)| p.abs_line == 0 && p.column == column)
+            .map(|(c, r, _)| (*c, *r))
+            .expect("screen cell for column")
+    };
+    let (in_beta, in_gamma) = (cell_at(7), cell_at(12));
+
+    let copied = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let copied_for_closure = copied.clone();
+    let event = |kind, (column, row): (u16, u16)| MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers: KeyModifiers::empty(),
+    };
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+        MouseEventKind::Down(MouseButton::Left),
+    ] {
+        app.handle_copy_selection_mouse_with(event(kind, in_beta), |_| true);
+    }
+    app.handle_copy_selection_mouse_with(event(MouseEventKind::Drag(MouseButton::Left), in_gamma), |_| true);
+    app.handle_copy_selection_mouse_with(event(MouseEventKind::Up(MouseButton::Left), in_gamma), |text| {
+        *copied_for_closure.lock().unwrap() = text.to_string();
+        true
+    });
+
+    assert_eq!(copied.lock().unwrap().as_str(), "beta gamma");
 }
 
 #[test]
@@ -117,8 +160,8 @@ fn test_input_composer_selection_never_includes_prompt_prefix() {
     let backend = ratatui::backend::TestBackend::new(80, 24);
     let mut terminal = ratatui::Terminal::new(backend).expect("failed to create test terminal");
     let rendered = render_and_snap(&app, &mut terminal);
-    // Sanity: the prompt decoration is actually on screen ("1>" for the first prompt).
-    assert!(rendered.contains("1>"), "expected prompt prefix on screen");
+    // Sanity: the prompt rail is actually on screen.
+    assert!(rendered.contains('┃'), "expected prompt prefix on screen");
 
     let points = input_pane_screen_points(80, 24);
     let row = points.first().map(|(_, r, _)| *r).expect("composer row");
