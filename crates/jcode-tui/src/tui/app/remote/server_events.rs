@@ -2169,6 +2169,10 @@ pub(in crate::tui::app) fn handle_server_event(
                 app.note_runtime_memory_event_force("history_loaded", "remote_history_applied");
                 crate::process_memory::release_retained_heap("client_history_loaded");
                 if let Some(notice) = app.pending_remote_rewind_notice.take() {
+                    if let Some(prompt) = notice.returned_prompt {
+                        app.cursor_pos = prompt.len();
+                        app.input = prompt;
+                    }
                     let content = if notice.undo {
                         "✓ Undid rewind. Restored the messages removed by the last rewind."
                             .to_string()

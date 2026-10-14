@@ -470,6 +470,7 @@ fn test_handle_server_event_history_same_session_rewind_reapply_clears_streaming
         undo: false,
         message_index: Some(1),
         changed_messages: 2,
+        returned_prompt: None,
     });
 
     // Truncated payload after the rewind: same session id, fewer messages.
@@ -770,6 +771,7 @@ fn test_handle_server_event_history_same_session_rewind_then_late_done_does_not_
         undo: false,
         message_index: Some(1),
         changed_messages: 2,
+        returned_prompt: None,
     });
 
     // Truncated payload after the rewind: same session id, fewer messages.

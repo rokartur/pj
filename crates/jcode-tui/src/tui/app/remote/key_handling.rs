@@ -170,7 +170,7 @@ fn show_remote_rewind_history(app: &mut App) {
         let preview = crate::util::truncate_str(&msg.content, 80);
         history.push_str(&format!("  {} {} - {}\n", i + 1, role_str, preview));
     }
-    history.push_str("\nUse /rewind N to rewind to message N (removes all messages after).");
+    history.push_str("\nUse /rewind N to rewind to message N (removes all messages after; a user message moves back to the input for editing).");
     history.push_str(" After rewinding, use /rewind undo to restore the removed messages.");
     app.push_display_message(DisplayMessage::system(history));
 }
@@ -197,6 +197,7 @@ async fn handle_remote_rewind_command(
             undo: true,
             message_index: None,
             changed_messages: 0,
+            returned_prompt: None,
         });
         app.set_status_notice("Undoing rewind...");
         return Ok(true);
@@ -216,12 +217,16 @@ async fn handle_remote_rewind_command(
 
     match num_str.trim().parse::<usize>() {
         Ok(n) if n > 0 && n <= message_count => {
-            super::checkpoints::offer_restore(app, n).await;
+            let target = remote_rewindable_messages(app)[n - 1];
+            let returned_prompt = (target.role == "user").then(|| target.content.clone());
+            let kept = n - usize::from(returned_prompt.is_some());
+            super::checkpoints::offer_restore(app, kept).await;
             remote.rewind(n).await?;
             app.pending_remote_rewind_notice = Some(PendingRemoteRewindNotice {
                 undo: false,
                 message_index: Some(n),
-                changed_messages: message_count - n,
+                changed_messages: message_count - kept,
+                returned_prompt,
             });
             app.set_status_notice(format!("Rewinding to message {}...", n));
         }

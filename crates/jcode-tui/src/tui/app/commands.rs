@@ -2057,7 +2057,7 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
             let preview = crate::util::truncate_str(content.trim(), 80);
             history.push_str(&format!("  {} {} - {}\n", i + 1, role_str, preview));
         }
-        history.push_str("\nUse /rewind N to rewind to message N (removes all messages after). After rewinding, use /rewind undo to restore the removed messages.");
+        history.push_str("\nUse /rewind N to rewind to message N (removes all messages after; a user message moves back to the input for editing). After rewinding, use /rewind undo to restore the removed messages.");
 
         app.push_display_message(DisplayMessage::system(history));
         return true;
@@ -2065,18 +2065,22 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
 
     if let Some(num_str) = trimmed.strip_prefix("/rewind ") {
         let num_str = num_str.trim();
-        let targets = app.session.rewind_target_stored_indices();
-        let visible_count = targets.len();
-        match num_str.parse::<usize>() {
-            Ok(n) if n > 0 && n <= visible_count => {
-                let removed = visible_count - n;
+        let visible_count = app.session.rewind_target_count();
+        let parsed = num_str.parse::<usize>();
+        match parsed.map(|n| (n, app.session.rewind_cut(n))) {
+            Ok((n, Some(cut))) => {
                 app.rewind_undo_snapshot = Some(LocalRewindUndoSnapshot {
                     messages: app.session.messages.clone(),
                     provider_session_id: app.provider_session_id.clone(),
                     session_provider_session_id: app.session.provider_session_id.clone(),
                     visible_message_count: visible_count,
                 });
-                app.session.truncate_messages(targets[n - 1] + 1);
+                app.session.truncate_messages(cut.stored_len);
+                let removed = visible_count - app.session.rewind_target_count();
+                if let Some(prompt) = cut.returned_prompt {
+                    app.cursor_pos = prompt.len();
+                    app.input = prompt;
+                }
                 let provider_messages = app.session.messages_for_provider_uncached();
                 app.replace_provider_messages(provider_messages);
                 app.session.updated_at = chrono::Utc::now();
@@ -2114,7 +2118,7 @@ pub(super) fn handle_session_command(app: &mut App, trimmed: &str) -> bool {
                     if removed == 1 { "" } else { "s" }
                 )));
             }
-            Ok(n) => {
+            Ok((n, None)) => {
                 app.push_display_message(DisplayMessage::error(format!(
                     "Invalid message number: {}. Valid range: 1-{}",
                     n, visible_count

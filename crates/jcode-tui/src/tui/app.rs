@@ -190,6 +190,7 @@ struct PendingRemoteRewindNotice {
     undo: bool,
     message_index: Option<usize>,
     changed_messages: usize,
+    returned_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
