@@ -509,6 +509,8 @@ impl App {
         if self.pending_provider_failover.is_some() {
             return false;
         }
+        // Every remote error path that gives up on automatic retries lands here.
+        self.notify_needs_attention("error", &Self::compact_provider_failure(error));
         let routes = self.fallback_candidate_routes();
         let current_model = self.current_model_for_fallback();
         let current_provider = self.current_provider_label_for_fallback();

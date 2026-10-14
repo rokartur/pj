@@ -32,20 +32,14 @@ impl App {
     /// Send a desktop notification for a just-completed turn when warranted.
     /// Call at turn completion, after the final assistant message is committed.
     pub(super) fn maybe_notify_turn_complete(&self, duration_secs: Option<f32>) {
-        if !self.runtime_mode_allows_turn_notifications() {
-            return;
-        }
-        let cfg = &crate::config::config().notifications;
-        if !cfg.turn_complete {
-            return;
-        }
-        if cfg.turn_complete_only_when_unfocused && self.client_focused() {
+        if !self.turn_notifications_wanted() {
             return;
         }
         let Some(duration) = duration_secs else {
             return;
         };
 
+        let cfg = &crate::config::config().notifications;
         let todos = self
             .active_client_session_id()
             .map(load_session_todos)
@@ -67,10 +61,40 @@ impl App {
             &todos,
             self.last_assistant_text_for_notification().as_deref(),
         );
-        let sound = cfg.turn_complete_sound.trim();
+        self.send_turn_notification(&notification);
+    }
+
+    /// Notify that the agent stopped and waits on the user: a question to answer
+    /// or an error no automatic retry will recover. No duration threshold.
+    pub(super) fn notify_needs_attention(&self, reason: &str, detail: &str) {
+        if !self.turn_notifications_wanted() {
+            return;
+        }
+        let notification = build_attention_notification(
+            self.active_client_session_id()
+                .and_then(crate::id::extract_session_name),
+            reason,
+            detail,
+        );
+        self.send_turn_notification(&notification);
+    }
+
+    fn turn_notifications_wanted(&self) -> bool {
+        let cfg = &crate::config::config().notifications;
+        matches!(self.runtime_mode(), super::AppRuntimeMode::RemoteClient)
+            && !self.is_replay
+            && cfg.turn_complete
+            && !(cfg.turn_complete_only_when_unfocused && self.client_focused())
+    }
+
+    fn send_turn_notification(&self, notification: &TurnNotification) {
+        let sound = crate::config::config()
+            .notifications
+            .turn_complete_sound
+            .trim();
         let sound = (!sound.is_empty()).then_some(sound);
         if !send_originating_terminal_notification(
-            &notification,
+            notification,
             self.active_client_session_id().unwrap_or("unknown"),
             sound,
         ) {
@@ -81,10 +105,6 @@ impl App {
                 sound,
             );
         }
-    }
-
-    fn runtime_mode_allows_turn_notifications(&self) -> bool {
-        matches!(self.runtime_mode(), super::AppRuntimeMode::RemoteClient) && !self.is_replay
     }
 
     /// Final assistant text of the turn, used for the notification snippet.
@@ -255,6 +275,26 @@ pub(super) fn build_turn_notification(
         title,
         subtitle,
         body,
+    }
+}
+
+/// title: `jcode · <session> · <reason>`, body: first line of `detail`.
+pub(super) fn build_attention_notification(
+    session_name: Option<&str>,
+    reason: &str,
+    detail: &str,
+) -> TurnNotification {
+    let mut title = String::from("jcode");
+    if let Some(name) = session_name {
+        title.push_str(" · ");
+        title.push_str(name);
+    }
+    title.push_str(" · ");
+    title.push_str(reason);
+    TurnNotification {
+        title,
+        subtitle: None,
+        body: summary_snippet(detail),
     }
 }
 
@@ -523,6 +563,18 @@ mod tests {
         let blocked = vec![todo("completed", false), todo("pending", true)];
         let n = build_turn_notification(None, 200.0, &blocked, None);
         assert_eq!(n.subtitle.as_deref(), Some("1/2 todos · 1 blocked"));
+    }
+
+    #[test]
+    fn attention_notification_names_reason_and_clips_detail() {
+        let n = build_attention_notification(
+            Some("fox"),
+            "question",
+            "## Which **DB**?\nPostgres or SQLite",
+        );
+        assert_eq!(n.title, "jcode · fox · question");
+        assert_eq!(n.subtitle, None);
+        assert_eq!(n.body, "Which DB?");
     }
 
     #[test]
