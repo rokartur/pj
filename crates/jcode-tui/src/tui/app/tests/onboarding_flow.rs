@@ -303,7 +303,7 @@ fn import_review_cursor_navigation_wraps() {
 }
 
 #[test]
-fn login_phase_advances_to_model_select_without_telemetry_prompt() {
+fn login_phase_advances_to_model_select() {
     with_temp_jcode_home(|| {
         let mut app = create_test_app();
         app.onboarding_flow = None;
@@ -317,9 +317,8 @@ fn login_phase_advances_to_model_select_without_telemetry_prompt() {
             app.onboarding_phase(),
             Some(OnboardingPhase::Login { .. })
         ));
-        // After login we no longer ask a telemetry-consent question; we advance
-        // straight through model selection into the first-run start choice and
-        // leave content sharing off.
+        // After login we advance straight through model selection into the
+        // first-run start choice.
         app.onboarding_after_login();
         assert!(matches!(
             app.onboarding_phase(),
@@ -327,7 +326,6 @@ fn login_phase_advances_to_model_select_without_telemetry_prompt() {
                 | Some(OnboardingPhase::Suggestions)
                 | Some(OnboardingPhase::StartChoice { .. })
         ));
-        assert!(!crate::telemetry::content_sharing_enabled());
     });
 }
 
@@ -1668,7 +1666,7 @@ fn recent_project_review_falls_back_cleanly_when_no_repo_is_known() {
     }));
 }
 
-include!("onboarding_flow_telemetry.rs");
+include!("onboarding_flow_prefetch.rs");
 
 #[test]
 fn import_less_enter_on_row_toggles_instead_of_committing() {

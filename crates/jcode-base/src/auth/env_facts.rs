@@ -8,9 +8,8 @@
 //! on a flow that was never going to succeed.
 //!
 //! This module inverts that: probe the environment cheaply and concurrently up
-//! front, then *choose* an auth method that can actually work. The probe results
-//! are also exactly the right shape for privacy-preserving telemetry, because
-//! every field is a three-valued enum with no user data in it.
+//! front, then *choose* an auth method that can actually work. Every probe field
+//! is a three-valued enum with no user data in it.
 //!
 //! Design note: [`Tri::Unknown`] always biases toward the optimistic path. A
 //! wrong `No` is worse than a wrong `Unknown`, because it silently downgrades a
@@ -441,35 +440,12 @@ mod tests {
     }
 
     #[test]
-    fn probe_is_cheap_and_carries_no_user_data() {
-        let (facts, elapsed) = EnvFacts::probe_timed();
+    fn probe_is_cheap() {
+        let (_facts, elapsed) = EnvFacts::probe_timed();
         assert!(
             elapsed < Duration::from_millis(500),
             "probe budget exceeded: {elapsed:?}"
         );
-        // The serialized form is what telemetry would send. It must contain
-        // nothing but the closed Tri vocabulary.
-        let json = serde_json::to_string(&facts).expect("facts serialize");
-        for value in json
-            .split(['{', '}', ',', ':', '"'])
-            .filter(|s| !s.is_empty())
-        {
-            assert!(
-                matches!(
-                    value,
-                    "tty"
-                        | "browser"
-                        | "loopback_bind"
-                        | "config_writable"
-                        | "container"
-                        | "proxy"
-                        | "yes"
-                        | "no"
-                        | "unknown"
-                ),
-                "unexpected token {value:?} in telemetry payload {json}"
-            );
-        }
     }
 
     #[test]

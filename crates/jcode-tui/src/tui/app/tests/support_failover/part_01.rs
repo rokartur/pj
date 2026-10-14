@@ -422,11 +422,6 @@ impl EnvRestoreGuard {
         )
     }
 
-    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-        let guard = Self::capture([key]);
-        crate::env::set_var(key, value);
-        guard
-    }
 }
 
 impl Drop for EnvRestoreGuard {
@@ -446,9 +441,6 @@ fn with_temp_jcode_home<T>(f: impl FnOnce() -> T) -> T {
     let temp = tempfile::tempdir().expect("tempdir");
     let _env_guard = EnvRestoreGuard::capture(["JCODE_HOME"]);
     crate::env::set_var("JCODE_HOME", temp.path());
-    // Preserve inherited telemetry opt-out env. In this crate telemetry-core is
-    // a dependency, so cfg(test) does not stub its HTTP delivery path; inherited
-    // opt-out must keep blocking delivery for tests that exercise onboarding.
     crate::auth::claude::set_active_account_override(None);
     crate::auth::codex::set_active_account_override(None);
     crate::auth::AuthStatus::invalidate_cache();

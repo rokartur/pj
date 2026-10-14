@@ -72,7 +72,6 @@ pub(super) async fn login_google_flow(
     };
 
     print_summary(&services, &tokens)?;
-    crate::telemetry::record_auth_success("google", "oauth");
     Ok(())
 }
 

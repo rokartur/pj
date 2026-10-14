@@ -345,7 +345,7 @@ impl App {
     /// against a dead credential can never succeed; before this breaker,
     /// auto-poke/queued-retry loops logged thousands of 401s in a single
     /// session (one failed turn per resend) until the user noticed.
-    pub(super) fn trip_credential_failure_breaker(&mut self, message: &str) {
+    pub(super) fn trip_credential_failure_breaker(&mut self) {
         let failures = self.consecutive_credential_failures;
         self.clear_pending_remote_retry();
         let cleared_pokes = if self.auto_poke_incomplete_todos {
@@ -355,12 +355,7 @@ impl App {
         };
         self.overnight_auto_poke = None;
 
-        // Surface the streak as an explicit auth_failed telemetry event to
-        // distinguish "breaker tripped on a dead credential" from blips.
-        let reason = crate::auth::login_diagnostics::classify_auth_failure_message(message);
         let provider = self.provider_name().to_string();
-        crate::telemetry::record_auth_failed_reason(&provider, "session", reason.label());
-
         self.push_display_message(DisplayMessage::error(format!(
             "🛑 Stopped automatic retries: {failures} consecutive credential/auth failures. \
              The current login or API key for {provider} is not working, so resending the same \
@@ -426,12 +421,6 @@ impl App {
         });
 
         crate::logging::info("App::new_minimal_with_session: skipping skill/prompt bootstrap");
-        crate::telemetry::begin_session_with_parent(
-            provider.name(),
-            &provider.model(),
-            session.parent_id.clone(),
-            false,
-        );
 
         let mut app = Self {
             provider,
@@ -555,7 +544,6 @@ impl App {
             copy_selection_last_click: None,
             copy_selection_word_anchor: None,
             onboarding_import_error: None,
-            onboarding_telemetry_choice_made: false,
             onboarding_import_failed_provider: None,
             onboarding_pending_model_validation: None,
             onboarding_recent_project_prefetch: None,
@@ -897,13 +885,6 @@ impl App {
             t_prompt.as_secs_f64() * 1000.0,
         ));
 
-        crate::telemetry::begin_session_with_parent(
-            provider.name(),
-            &provider.model(),
-            session.parent_id.clone(),
-            false,
-        );
-
         let mut app = Self {
             provider,
             registry,
@@ -1026,7 +1007,6 @@ impl App {
             onboarding_startup_checked: false,
             onboarding_import_in_progress: None,
             onboarding_import_error: None,
-            onboarding_telemetry_choice_made: false,
             onboarding_import_failed_provider: None,
             onboarding_pending_model_validation: None,
             onboarding_recent_project_prefetch: None,

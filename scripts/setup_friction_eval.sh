@@ -59,8 +59,7 @@ check() { # check <name> <expected-desc> <actual-desc> <condition-exit-status>
 }
 
 # ---------------------------------------------------------------------------
-# Sandbox: mocked release endpoint + tools, identical shape to
-# test_install_conversion.sh so both exercise the same installer code paths.
+# Sandbox: mocked release endpoint + tools for the installer code paths.
 # ---------------------------------------------------------------------------
 mkdir -p "$work/bin"
 
@@ -86,7 +85,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 case "$url" in
-  *telemetry.jcode.sh*) ;;
   *jcode.sh/releases/latest/version) printf 'v%s\n' "${EVAL_VERSION:-1.2.3}" ;;
   *jcode.sh/releases/v*/download-bases)
     printf 'https://github.com/1jehuang/jcode/releases/download/v%s\n' "${EVAL_VERSION:-1.2.3}"

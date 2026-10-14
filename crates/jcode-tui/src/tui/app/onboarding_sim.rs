@@ -15,8 +15,7 @@
 //! It stays safe because the real flow itself is safe to re-run: importing a
 //! login jcode already has keeps the existing login (no re-sign-in, no revoked
 //! trust), "Log in to OpenAI" skips the sign-in when OpenAI is already
-//! connected, and onboarding never rewrites an existing telemetry choice. The
-//! one rehearsal-only guard is that a telemetry choice made here is not saved.
+//! connected.
 
 use super::App;
 use super::SessionPickerMode;
@@ -91,7 +90,6 @@ impl App {
         self.onboarding_import_error = None;
         self.onboarding_import_failed_provider = None;
         self.onboarding_pending_model_validation = None;
-        self.onboarding_telemetry_choice_made = false;
         self.onboarding_auto_model_selection_active
             .store(false, std::sync::atomic::Ordering::Release);
 

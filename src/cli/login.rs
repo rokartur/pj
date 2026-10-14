@@ -219,7 +219,6 @@ pub async fn run_login(
                     "Scriptable login flags require an explicit provider. Use `jcode login --provider <provider> ...`."
                 );
             }
-            crate::telemetry::record_setup_step_once("login_picker_opened");
             let providers = crate::provider_catalog::cli_login_providers();
             if !io::stdin().is_terminal() {
                 anyhow::bail!(
@@ -261,8 +260,6 @@ pub async fn run_login_provider(
     {
         import_google_client_json(source, options.json)?;
     }
-    crate::telemetry::record_provider_selected(provider.id);
-    crate::telemetry::record_auth_started(provider.id, provider.auth_kind.label());
     let explicit_scriptable_flow = options.uses_scriptable_flow()?;
     // Google setup is an interactive wizard. On a terminal it must run even
     // with --no-browser (it prints each URL), otherwise a first-time user
@@ -305,12 +302,7 @@ pub async fn run_login_provider(
     );
     let login_result = if explicit_scriptable_flow {
         run_scriptable_login_provider(provider, account_label, &options).await
-    } else if let Some(reason) = auto_scriptable_reason {
-        crate::telemetry::record_auth_surface_blocked_reason(
-            provider.id,
-            provider.auth_kind.label(),
-            reason,
-        );
+    } else if auto_scriptable_reason.is_some() {
         if !options.json {
             eprintln!(
                 "Detected a manual-safe login environment for {}. Starting the auth URL flow instead of browser-first login.",
@@ -392,11 +384,6 @@ pub async fn run_login_provider(
         Err(err) => {
             let reason =
                 crate::auth::login_diagnostics::classify_auth_failure_message(&err.to_string());
-            crate::telemetry::record_auth_failed_reason(
-                provider.id,
-                provider.auth_kind.label(),
-                reason.label(),
-            );
             crate::logging::auth_event(
                 "login_flow_failed",
                 provider.id,
@@ -443,11 +430,6 @@ pub async fn run_login_provider(
     if let Err(err) = validation {
         let error_message = err.to_string();
         let reason = crate::auth::login_diagnostics::classify_auth_failure_message(&error_message);
-        crate::telemetry::record_auth_failed_reason(
-            provider.id,
-            provider.auth_kind.label(),
-            reason.label(),
-        );
         crate::logging::auth_event(
             "post_login_validation_failed",
             provider.id,
@@ -591,7 +573,6 @@ fn login_openai_api_key_flow() -> Result<()> {
             .display()
     );
     eprintln!("Provider: openai-api (native OpenAI Responses API)");
-    crate::telemetry::record_auth_success("openai-api", "api_key");
     Ok(())
 }
 
@@ -620,7 +601,6 @@ async fn login_claude_flow(requested_label: Option<&str>, no_browser: bool) -> R
     if let Some(email) = profile_email {
         eprintln!("Profile email: {}", email);
     }
-    crate::telemetry::record_auth_success("claude", "oauth");
     Ok(())
 }
 
@@ -649,7 +629,6 @@ fn login_anthropic_api_key_flow() -> Result<()> {
             .display()
     );
     eprintln!("Provider: claude (native Anthropic Messages API)");
-    crate::telemetry::record_auth_success("anthropic-api", "api_key");
     Ok(())
 }
 
@@ -665,7 +644,6 @@ async fn login_openai_flow(requested_label: Option<&str>, no_browser: bool) -> R
             .join("openai-auth.json")
             .display()
     );
-    crate::telemetry::record_auth_success("openai", "oauth");
     Ok(())
 }
 
@@ -693,7 +671,6 @@ fn login_openrouter_flow() -> Result<()> {
             .join("openrouter.env")
             .display()
     );
-    crate::telemetry::record_auth_success("openrouter", "api_key");
     Ok(())
 }
 
@@ -738,7 +715,6 @@ fn login_bedrock_flow() -> Result<()> {
     );
     eprintln!("Region: {}", region);
     eprintln!("Provider: bedrock (native AWS Bedrock Converse API)");
-    crate::telemetry::record_auth_success("bedrock", "api_key");
     Ok(())
 }
 
@@ -823,7 +799,6 @@ fn login_azure_flow() -> Result<()> {
             "Next step: if you're using Azure CLI auth, run `az login` (and ensure your identity has the Cognitive Services OpenAI User role)."
         );
     }
-    crate::telemetry::record_auth_success("azure", if use_entra { "entra_id" } else { "api_key" });
     Ok(())
 }
 
@@ -912,7 +887,7 @@ fn login_openai_compatible_flow(
         resolved.default_model = Some(model.to_string());
     }
 
-    let auth_method = if resolved.requires_api_key {
+    if resolved.requires_api_key {
         eprintln!("API key env variable: {}\n", resolved.api_key_env);
         if options.openai_compatible_api_key.is_none() {
             existing_key_notice::announce_existing_api_key(&resolved);
@@ -944,7 +919,6 @@ fn login_openai_compatible_flow(
         )?;
         save_named_api_key(&resolved.env_file, &resolved.api_key_env, &key)?;
         eprintln!("\nSuccessfully saved {} API key!", resolved.display_name);
-        "api_key"
     } else {
         eprintln!("Endpoint: {}", resolved.api_base);
         if setup_url_depends_on_key {
@@ -974,7 +948,6 @@ fn login_openai_compatible_flow(
                 None,
             )?;
             eprintln!("\nSaved {} local endpoint setup.", resolved.display_name);
-            "local_endpoint"
         } else {
             crate::provider_catalog::save_named_api_key(
                 &resolved.env_file,
@@ -985,9 +958,8 @@ fn login_openai_compatible_flow(
                 "\nSaved {} local endpoint setup and optional API key.",
                 resolved.display_name
             );
-            "local_endpoint_with_optional_api_key"
         }
-    };
+    }
 
     if !resolved.requires_api_key && resolved.default_model.is_none() {
         eprintln!("{}", next_step::local_endpoint_hint(&resolved.id));
@@ -1002,7 +974,6 @@ fn login_openai_compatible_flow(
     if let Some(default_model) = resolved.default_model {
         eprintln!("Default model hint: {}", default_model);
     }
-    crate::telemetry::record_auth_success(&resolved.id, auth_method);
     Ok(())
 }
 
@@ -1092,7 +1063,6 @@ fn login_cursor_flow() -> Result<()> {
             .display()
     );
     eprintln!("jcode will use the native Cursor HTTPS transport.");
-    crate::telemetry::record_auth_success("cursor", "api_key");
     Ok(())
 }
 
@@ -1142,7 +1112,6 @@ async fn login_copilot_device_flow(no_browser: bool) -> Result<()> {
     crate::auth::copilot::save_github_token(&token, &username)?;
 
     eprintln!("  ✓ Authenticated as {} via GitHub Copilot", username);
-    crate::telemetry::record_auth_success("copilot", "oauth_device_code");
     Ok(())
 }
 
@@ -1172,7 +1141,6 @@ async fn login_antigravity_flow(no_browser: bool) -> Result<()> {
     if let Some(project_id) = tokens.project_id.as_deref() {
         eprintln!("Resolved Antigravity project: {}", project_id);
     }
-    crate::telemetry::record_auth_success("antigravity", "oauth");
     Ok(())
 }
 
@@ -1214,7 +1182,6 @@ async fn login_gemini_flow(no_browser: bool) -> Result<()> {
     if let Some(email) = tokens.email.as_deref() {
         eprintln!("Google account: {}", email);
     }
-    crate::telemetry::record_auth_success("gemini", "oauth");
     Ok(())
 }
 
@@ -1240,7 +1207,6 @@ fn login_gemini_api_key_flow() -> Result<()> {
     eprintln!(
         "Provider: gemini (official Gemini Developer API, generativelanguage.googleapis.com)"
     );
-    crate::telemetry::record_auth_success("gemini", "api_key");
     Ok(())
 }
 

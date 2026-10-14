@@ -134,7 +134,7 @@ fn continue_pill_line(focused: bool, align: Alignment) -> Line<'static> {
 }
 
 /// The summary-screen action row. A new user can import the logins we found,
-/// with secondary controls for a selective import and telemetry settings.
+/// with a secondary control for a selective import.
 fn import_summary_pills_line(
     focused: crate::tui::ImportSummaryPill,
     align: Alignment,
@@ -147,76 +147,7 @@ fn import_summary_pills_line(
         "Import less",
         focused == Pill::ImportLess,
     ));
-    spans.push(Span::raw("   "));
-    spans.extend(lozenge_pill_spans(
-        "Telemetry settings",
-        focused == Pill::Telemetry,
-    ));
     Line::from(spans).alignment(align)
-}
-
-/// The telemetry settings sub-page: three stacked pills, most sharing first,
-/// each with a dim one-line consequence caption. Reached from the "Telemetry
-/// settings" pill on the import summary; Esc returns without changing anything.
-fn telemetry_settings_lines(
-    highlighted: crate::tui::TelemetryChoice,
-    env_forced_off: bool,
-    align: Alignment,
-) -> Vec<Line<'static>> {
-    use crate::tui::TelemetryChoice as Choice;
-    let dim = Style::default().fg(dim_color());
-    let mut lines: Vec<Line<'static>> = Vec::new();
-    lines.push(
-        Line::from(Span::styled(
-            "Telemetry settings",
-            Style::default()
-                .fg(welcome_accent())
-                .add_modifier(Modifier::BOLD),
-        ))
-        .alignment(align),
-    );
-    lines.push(Line::from(""));
-
-    let options = [
-        (
-            Choice::Everything,
-            "Share full transcripts (30-day retention)",
-            "Includes prompts, model responses, reasoning, code, and tool input/output",
-        ),
-        (
-            Choice::NoContent,
-            "No prompts or transcripts",
-            "Usage stats and crash reports only",
-        ),
-        (
-            Choice::Nothing,
-            "Send nothing",
-            "We stop seeing crashes and can't fix them",
-        ),
-    ];
-    for (choice, label, caption) in options {
-        lines.push(Line::from(lozenge_pill_spans(label, choice == highlighted)).alignment(align));
-        lines.push(Line::from(Span::styled(caption, dim)).alignment(align));
-        lines.push(Line::from(""));
-    }
-
-    if env_forced_off {
-        lines.push(
-            Line::from(Span::styled(
-                "Your environment already disables telemetry (JCODE_NO_TELEMETRY).",
-                dim,
-            ))
-            .alignment(align),
-        );
-    }
-    lines.push(
-        Line::from(Span::styled(
-            "Esc goes back. Change this later with /telemetry.",
-            dim,
-        ))
-        .alignment(align),
-    );
-    lines
 }
 
 /// Render the read-only detected-login list for the import summary screen: one
@@ -473,21 +404,10 @@ fn welcome_body_lines(app: &dyn TuiState) -> Vec<Line<'static>> {
                     );
                 }
                 Some(prompt) if !prompt.choosing => {
-                    // Telemetry settings sub-page takes over the body while
-                    // it is open, then returns to the summary below.
-                    if let Some(choice) = prompt.telemetry {
-                        lines.extend(telemetry_settings_lines(
-                            choice,
-                            prompt.telemetry_env_forced_off,
-                            align,
-                        ));
-                        return lines;
-                    }
                     // Summary screen (default): show what we detected as a
                     // read-only checkmarked list, then land the user on a
                     // preselected "Continue" pill that imports everything.
-                    // "Import less" opens the per-login list; "Telemetry
-                    // settings" opens the telemetry sub-page.
+                    // "Import less" opens the per-login list.
                     let found = prompt.rows.len();
                     lines.push(
                         Line::from(Span::styled(
@@ -637,9 +557,6 @@ fn welcome_body_lines(app: &dyn TuiState) -> Vec<Line<'static>> {
 ///
 /// Vertical structure (top to bottom):
 ///   title, keyboard hint, gap, phase body.
-///
-/// Telemetry is not explained up front: the "Telemetry settings" pill on the
-/// import summary owns that, which keeps the first page clean.
 pub(super) fn draw_onboarding_welcome(frame: &mut Frame, app: &dyn TuiState, area: Rect) {
     if area.width < 4 || area.height < 6 {
         // Too small for the full treatment: fall back to a minimal welcome.

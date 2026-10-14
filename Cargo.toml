@@ -93,7 +93,6 @@ members = [
     "crates/jcode-voice",
     "crates/jcode-desktop-open",
     "crates/jcode-companion",
-    "crates/jcode-telemetry-core",
     "crates/jcode-tui-workspace",
     "crates/jcode-render-core",
 ]

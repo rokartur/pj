@@ -100,11 +100,8 @@ fn rehearsal_keys_drive_the_real_import_summary() {
         assert_eq!(pill(&app), SummaryPill::Continue);
         app.handle_key(KeyCode::Right, KeyModifiers::NONE).unwrap();
         assert_eq!(pill(&app), SummaryPill::ImportLess);
-        app.handle_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
-        assert_eq!(pill(&app), SummaryPill::Telemetry);
 
         // Enter on "Import less" opens the real checkbox list.
-        app.handle_key(KeyCode::Up, KeyModifiers::NONE).unwrap();
         app.handle_key(KeyCode::Enter, KeyModifiers::NONE).unwrap();
         assert!(matches!(
             app.onboarding_phase(),
@@ -113,30 +110,6 @@ fn rehearsal_keys_drive_the_real_import_summary() {
     });
 }
 
-#[test]
-fn rehearsal_telemetry_choice_is_not_saved() {
-    with_temp_jcode_home(|| {
-        write_fake_gemini_cli_login();
-        let mut app = create_test_app();
-        app.start_onboarding_simulator();
-        let before = crate::tui::app::onboarding_flow::TelemetryLevel::current();
-
-        // Open telemetry settings, pick "Send nothing".
-        app.handle_key(KeyCode::Char('t'), KeyModifiers::NONE)
-            .unwrap();
-        app.handle_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
-        app.handle_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
-        app.handle_key(KeyCode::Enter, KeyModifiers::NONE).unwrap();
-
-        assert_eq!(
-            crate::tui::app::onboarding_flow::TelemetryLevel::current(),
-            before
-        );
-        let marker = std::path::Path::new(&std::env::var_os("JCODE_HOME").unwrap())
-            .join("no_telemetry");
-        assert!(!marker.exists(), "rehearsal must not write telemetry markers");
-    });
-}
 
 #[test]
 fn alt_5_restarts_the_rehearsal_from_a_pristine_first_screen() {

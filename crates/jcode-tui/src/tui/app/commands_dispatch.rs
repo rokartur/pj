@@ -43,7 +43,6 @@ pub(super) fn ssh_unsupported_command(input: &str) -> bool {
             | "/tool-call-details"
             | "/colors"
             | "/theme"
-            | "/telemetry"
             | "/ssh"
             | "/remote"
             | "/resume"
@@ -74,7 +73,6 @@ pub(super) fn ssh_unsupported_command(input: &str) -> bool {
             | "/subscription"
             | "/fix"
             | "/support"
-            | "/feedback"
             | "/productivity"
             | "/wrapped"
             | "/stats"
@@ -239,8 +237,6 @@ fn dispatch_single_local_command(app: &mut App, trimmed: &str) -> bool {
         || app.handle_usage_reset_command(trimmed)
         || super::commands::handle_usage_command(app, trimmed)
         || super::productivity::handle_productivity_command(app, trimmed)
-        || super::commands::handle_feedback_command(app, trimmed)
-        || super::commands::handle_telemetry_command(app, trimmed)
         || super::support::handle_support_command(app, trimmed)
         || super::state_ui::handle_info_command(app, trimmed)
         || super::auth::handle_auth_command(app, trimmed)

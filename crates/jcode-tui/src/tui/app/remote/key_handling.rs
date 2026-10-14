@@ -1263,11 +1263,6 @@ pub(in crate::tui::app) async fn submit_remote_enter_input(
         }
 
         if trimmed == "/quit" {
-            crate::telemetry::end_session_with_reason(
-                app.provider.name(),
-                &app.provider.model(),
-                crate::telemetry::SessionEndReason::NormalExit,
-            );
             // In remote mode the shared server owns session lifecycle persistence.
             // Exiting this client should not overwrite the server's session file.
             app.should_quit = true;

@@ -283,16 +283,12 @@ impl App {
     /// provider picker, since that is the most common first login. The provider
     /// picker is still reachable via `/login`.
     pub(super) fn onboarding_start_default_login(&mut self) {
-        crate::telemetry::record_setup_step_once("login_picker_opened");
         self.start_login_provider(crate::provider_catalog::OPENAI_LOGIN_PROVIDER);
         self.set_status_notice("Login: opening OpenAI sign-in (or type /login for others)");
     }
 
-    /// Advance out of a login phase once credentials are available. Prompt and
-    /// transcript content sharing stays off unless the user explicitly opted in
-    /// on the "Telemetry settings" page, so we only write the default when no
-    /// choice has been recorded. Advance straight to model selection.
-    /// No-op unless the flow is in a login phase.
+    /// Advance out of a login phase once credentials are available, straight to
+    /// model selection. No-op unless the flow is in a login phase.
     pub(super) fn onboarding_after_login(&mut self) {
         if !matches!(
             self.onboarding_phase(),
@@ -303,10 +299,6 @@ impl App {
         // The import (if any) has resolved; leave the progress state.
         self.onboarding_import_in_progress = None;
         self.onboarding_import_error = None;
-        // Content sharing is opt-in and off by default: a fresh install has no
-        // marker, so there is nothing to write here. Never clear an existing
-        // opt-in; re-running onboarding must not change settings the user
-        // already chose.
         self.set_onboarding_phase(OnboardingPhase::ModelSelect);
         self.onboarding_after_model_select();
     }
@@ -396,9 +388,6 @@ impl App {
         // overlay (picker / sign-in) is open we let Esc close that first.
         if code == KeyCode::Esc
             && self.inline_interactive_state.is_none()
-            // The telemetry settings sub-page owns Esc (it means "go back to the
-            // import screen"), so the global bail-out does not apply there.
-            && !self.onboarding_telemetry_page_open()
             && self.session_picker_overlay.is_none()
             && self.login_picker_overlay.is_none()
             && self.account_picker_overlay.is_none()
@@ -543,8 +532,8 @@ impl App {
     /// Returns true if the key was consumed.
     ///
     /// The screen has two modes:
-    ///   * Summary: detected logins plus Continue, Import less, and Telemetry
-    ///     pills. Arrows/Tab move; Enter/Space commits.
+    ///   * Summary: detected logins plus Continue and Import less pills.
+    ///     Arrows/Tab move; Enter/Space commits.
     ///   * Choose (checkbox list): per-login Yes/No rows.
     ///     - Up / Down / k / j -> move the cursor between logins
     ///     - Left / h / y -> choose "Yes" (import) for the highlighted login
@@ -555,33 +544,12 @@ impl App {
         // `finished` means the user committed the import (so we kick it off
         // outside the borrow).
         let mut finished = false;
-        // Set when the user committed a telemetry level, so we persist it
-        // outside the review borrow.
-        let mut telemetry_choice = None;
         {
             let Some(review) = self.onboarding_import_review_mut() else {
                 return false;
             };
-            if let Some(level) = review.telemetry {
-                // Telemetry settings sub-page: three stacked options, most
-                // sharing first. Up/Down move, Enter commits and returns,
-                // Esc returns without changing anything.
-                match code {
-                    KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => {
-                        review.telemetry_step(false)
-                    }
-                    KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => {
-                        review.telemetry_step(true)
-                    }
-                    KeyCode::Esc | KeyCode::Left | KeyCode::Char('h') => review.close_telemetry(),
-                    KeyCode::Enter | KeyCode::Char(' ') => {
-                        telemetry_choice = Some(level);
-                        review.close_telemetry();
-                    }
-                    _ => return false,
-                }
-            } else if !review.choosing {
-                // Summary: Continue, Import less, and Telemetry pills.
+            if !review.choosing {
+                // Summary: Continue and Import less pills.
                 // Arrows/Tab move; Enter/Space commits the focused one.
                 match code {
                     KeyCode::Left
@@ -596,15 +564,12 @@ impl App {
                     | KeyCode::Char('l') => review.summary_step(true),
                     // c is a direct shortcut into choose mode.
                     KeyCode::Char('c') | KeyCode::Char('C') => review.enter_choose_mode(),
-                    // t jumps straight to the telemetry settings page.
-                    KeyCode::Char('t') | KeyCode::Char('T') => review.open_telemetry(),
                     // y = "yes, import everything" regardless of pill focus, so
                     // the timeout is never a forced wait.
                     KeyCode::Char('y') | KeyCode::Char('Y') => finished = true,
                     KeyCode::Enter | KeyCode::Char(' ') => match review.summary_pill {
                         SummaryPill::Continue => finished = true,
                         SummaryPill::ImportLess => review.enter_choose_mode(),
-                        SummaryPill::Telemetry => review.open_telemetry(),
                     },
                     _ => return false,
                 }
@@ -632,17 +597,6 @@ impl App {
                     _ => return false,
                 }
             }
-        }
-        if let Some(level) = telemetry_choice {
-            self.onboarding_telemetry_choice_made = true;
-            if self.onboarding_sim_active() {
-                // A rehearsal must leave this machine's real settings alone.
-                self.set_status_notice(format!("{} (rehearsal, not saved)", level.status_label()));
-            } else {
-                level.persist();
-                self.set_status_notice(level.status_label().to_string());
-            }
-            return true;
         }
         if finished {
             self.onboarding_finish_import_review();
@@ -776,18 +730,6 @@ impl App {
         }
     }
 
-    /// Whether the import screen's telemetry settings sub-page is currently
-    /// showing. Used so Esc means "go back" there rather than "leave
-    /// onboarding", and so the import countdown pauses while it is open.
-    pub(super) fn onboarding_telemetry_page_open(&self) -> bool {
-        matches!(
-            self.onboarding_phase(),
-            Some(OnboardingPhase::Login {
-                import: Some(review)
-            }) if review.telemetry.is_some()
-        )
-    }
-
     /// Refresh the status notice to reflect the current import-list selection.
     fn update_onboarding_import_review_status(&mut self) {
         if let Some(review) = self.onboarding_import_review_mut() {
@@ -795,14 +737,10 @@ impl App {
             let total = review.total();
             let secs = review.seconds_remaining();
             let notice = if !review.choosing {
-                if review.telemetry.is_some() {
-                    "Telemetry settings - arrows move, Enter chooses, Esc goes back".to_string()
-                } else {
-                    format!(
-                        "Found {total} login{} - Enter imports all (auto in {secs}s), or pick \"Import less\"",
-                        if total == 1 { "" } else { "s" },
-                    )
-                }
+                format!(
+                    "Found {total} login{} - Enter imports all (auto in {secs}s), or pick \"Import less\"",
+                    if total == 1 { "" } else { "s" },
+                )
             } else {
                 format!(
                     "Import {checked} of {total} login{} - Enter/Space toggles, arrows move, Continue imports",
@@ -845,11 +783,7 @@ impl App {
         self.onboarding_import_failed_provider = approved
             .first()
             .and_then(|&i| candidates.get(i))
-            .and_then(|c| {
-                c.telemetry_auth_labels()
-                    .first()
-                    .map(|(p, _)| p.to_string())
-            });
+            .and_then(|c| c.import_auth_labels().first().map(|(p, _)| p.to_string()));
         // Kick off the import on the runtime; the LoginCompleted event advances
         // onboarding and activates the provider.
         self.set_status_notice("Login: importing selected logins...");
@@ -864,7 +798,6 @@ impl App {
             ));
             return;
         };
-        let rehearsal = self.onboarding_sim_active();
         runtime.spawn(async move {
             // Never let an imported source shadow a login jcode already has.
             // Already-connected providers count as imported, so re-running
@@ -888,16 +821,6 @@ impl App {
                         return;
                     }
                 };
-            // Auto-import bypasses the manual `pending_login` path, so record
-            // `auth_success` here for each imported provider. Without this the
-            // onboarding activation funnel undercounts every imported login
-            // (the happy path of the guided first-run flow). Rehearsals are not
-            // real activations, so they stay out of the funnel.
-            for (provider, method) in &outcome.imported_auth_labels {
-                if !rehearsal {
-                    crate::telemetry::record_auth_success(provider, method);
-                }
-            }
             // Preserve which runtime should become the first-run default. The old
             // synthetic `auto-import` provider discarded this information, so the
             // auth-refresh path kept the stale pre-import provider and validation
