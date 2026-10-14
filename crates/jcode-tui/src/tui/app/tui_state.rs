@@ -399,7 +399,7 @@ impl App {
         if self.widget_auth_method(route) != crate::tui::info_widget::AuthMethod::AnthropicOAuth {
             return None;
         }
-        let view = super::usagefleet::group_view()?;
+        let view = super::usagefleet::active_claude()?.group?;
         let resets_in = view
             .blocked_until
             .as_deref()
@@ -407,23 +407,14 @@ impl App {
         pj_ext::usagefleet::block_message(&view, resets_in.as_deref())
     }
 
-    fn usagefleet_line(
+    fn active_claude(
         &self,
         auth_method: crate::tui::info_widget::AuthMethod,
-        usage_info: Option<&crate::tui::info_widget::UsageInfo>,
-    ) -> Option<String> {
+    ) -> Option<super::usagefleet::ActiveClaude> {
         if auth_method != crate::tui::info_widget::AuthMethod::AnthropicOAuth {
             return None;
         }
-        let view = super::usagefleet::group_view()?;
-        let account_used_pct = usage_info.filter(|info| info.available).map(|info| {
-            (
-                f64::from(info.five_hour) * 100.0,
-                f64::from(info.seven_day) * 100.0,
-            )
-        });
-        let show_used = crate::config::config().display.usage_display_used();
-        pj_ext::usagefleet::group_line(&view, account_used_pct, show_used)
+        super::usagefleet::active_claude()
     }
 
     fn widget_usage_info(
@@ -1589,7 +1580,7 @@ impl crate::tui::TuiState for App {
         let route = self.widget_route_info(model.as_deref());
         let auth_method = self.widget_auth_method(route);
         let usage_info = self.widget_usage_info(route, auth_method);
-        let usagefleet_line = self.usagefleet_line(auth_method, usage_info.as_ref());
+        let active_claude = self.active_claude(auth_method);
 
         let tokens_per_second = if matches!(self.status, ProcessingStatus::Streaming) {
             self.compute_streaming_tps()
@@ -1702,7 +1693,11 @@ impl crate::tui::TuiState for App {
             background_info,
             usage_info,
             usage_display_used: crate::config::config().display.usage_display_used(),
-            usagefleet_line,
+            claude_account: active_claude.as_ref().map(|claude| claude.name.clone()),
+            usagefleet_group: active_claude
+                .and_then(|claude| claude.group)
+                .as_ref()
+                .and_then(pj_ext::usagefleet::group_quota),
             tokens_per_second,
             provider_name: if uses_remote_widget_metadata {
                 self.remote_provider_name

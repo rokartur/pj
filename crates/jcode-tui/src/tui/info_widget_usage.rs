@@ -301,6 +301,72 @@ fn render_labeled_bar(
     ])
 }
 
+/// pj Overview, one row per budget, always in used %:
+/// `claude-fox 5h 48% · 7d 69% · 2h 30m` then `Artur      5h 49% · 7d 69%`.
+pub(super) fn render_claude_quota(
+    account: &str,
+    usage: Option<&UsageInfo>,
+    group: Option<&pj_ext::usagefleet::GroupQuota>,
+) -> Vec<Line<'static>> {
+    let name_width = group
+        .map_or(0, |group| group.name.width())
+        .max(account.width());
+    let mut lines = Vec::new();
+    if let Some(usage) = usage.filter(|usage| usage.available) {
+        let percent = |fraction: f32| (fraction * 100.0).round().max(0.0) as u16;
+        let reset = usage
+            .five_hour_resets_at
+            .as_deref()
+            .map(crate::usage::format_reset_time);
+        lines.push(quota_row(
+            account,
+            name_width,
+            percent(usage.five_hour),
+            percent(usage.seven_day),
+            reset,
+        ));
+    }
+    if let Some(group) = group {
+        lines.push(quota_row(
+            &group.name,
+            name_width,
+            group.five_hour_used,
+            group.seven_day_used,
+            None,
+        ));
+    }
+    lines
+}
+
+fn quota_row(
+    name: &str,
+    name_width: usize,
+    five_hour_used: u16,
+    seven_day_used: u16,
+    reset: Option<String>,
+) -> Line<'static> {
+    let dim = Style::default().fg(rgb(140, 140, 150));
+    let used = |pct: u16| {
+        let left = 100u16.saturating_sub(pct) as u8;
+        Span::styled(
+            format!("{pct}%"),
+            Style::default().fg(remaining_color(left)),
+        )
+    };
+    let padding = " ".repeat(name_width.saturating_sub(name.width()));
+    let mut spans = vec![
+        Span::raw(format!("{name}{padding}")),
+        Span::styled(" 5h ", dim),
+        used(five_hour_used),
+        Span::styled(" · 7d ", dim),
+        used(seven_day_used),
+    ];
+    if let Some(reset) = reset {
+        spans.push(Span::styled(format!(" · {reset}"), dim));
+    }
+    Line::from(spans)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

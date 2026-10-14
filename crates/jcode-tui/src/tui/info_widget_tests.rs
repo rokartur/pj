@@ -8,6 +8,7 @@ use super::{
     render_usage_widget, swarm_plan_todos, todos_expanded_height, truncate_smart,
 };
 use crate::protocol::SwarmMemberStatus;
+use pj_ext::usagefleet::GroupQuota;
 use ratatui::layout::Rect;
 use std::time::{Duration, Instant};
 
@@ -1908,13 +1909,19 @@ fn compact_page_height_estimate_matches_rendered_lines() {
         usage_info: Some(UsageInfo {
             provider: UsageProvider::Anthropic,
             primary_limit_label: Some("5-hour".to_string()),
-            five_hour: 0.3,
+            five_hour: 0.48,
             secondary_limit_label: Some("Weekly".to_string()),
-            seven_day: 0.5,
+            seven_day: 0.69,
             available: true,
             ..Default::default()
         }),
-        usagefleet_line: Some("Artur: 5h 70% · 7d 83%".to_string()),
+        usage_display_used: false,
+        claude_account: Some("claude-fox".to_string()),
+        usagefleet_group: Some(GroupQuota {
+            name: "Artur".to_string(),
+            five_hour_used: 49,
+            seven_day_used: 69,
+        }),
         cache_hit_info: Some(CacheHitInfo {
             reported_input_tokens: 1_000,
             prompt_tokens: Some(1_000),
@@ -1931,13 +1938,14 @@ fn compact_page_height_estimate_matches_rendered_lines() {
 
     let lines = super::render_page(InfoPageKind::CompactOnly, &data, inner);
     let texts: Vec<String> = lines.iter().map(|line| line.to_string()).collect();
-    let weekly = texts.iter().position(|text| text.starts_with("7d "));
+    let account = texts
+        .iter()
+        .position(|text| text == "claude-fox 5h 48% · 7d 69%");
+    assert!(account.is_some(), "account quota row: {texts:?}");
     assert_eq!(
-        texts
-            .iter()
-            .position(|text| text == "Artur: 5h 70% · 7d 83%"),
-        weekly.map(|row| row + 1),
-        "group budget follows the account bars: {texts:?}"
+        texts.get(account.unwrap() + 1).map(String::as_str),
+        Some("Artur      5h 49% · 7d 69%"),
+        "group quota row follows the account, names aligned: {texts:?}"
     );
     assert_eq!(
         lines.len() as u16,

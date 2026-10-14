@@ -117,6 +117,11 @@ fn compact_background_height(data: &InfoWidgetData) -> u16 {
 }
 
 fn compact_usage_height(data: &InfoWidgetData) -> u16 {
+    if data.claude_account.is_some() {
+        // Mirrors render_claude_quota: the account row needs a reading, the group row a group.
+        let account_row = data.usage_info.as_ref().is_some_and(|info| info.available);
+        return u16::from(account_row) + u16::from(data.usagefleet_group.is_some());
+    }
     if let Some(info) = &data.usage_info
         && info.available
     {
@@ -147,7 +152,6 @@ fn compact_overview_height(data: &InfoWidgetData) -> u16 {
         + compact_memory_height(data)
         + compact_background_height(data)
         + compact_usage_height(data)
-        + u16::from(data.usagefleet_line.is_some())
         + compact_kv_cache_height(data)
         + changes_section_height(data)
 }

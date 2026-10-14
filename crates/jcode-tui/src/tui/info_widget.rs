@@ -72,7 +72,7 @@ use tips::render_tips_widget;
 pub(crate) use todos_render::swarm_plan_todos;
 pub(super) use todos_render::todos_expanded_height;
 use todos_render::{render_todos_compact, render_todos_expanded, render_todos_widget};
-use usage_render::{render_usage_compact, render_usage_widget};
+use usage_render::{render_claude_quota, render_usage_compact, render_usage_widget};
 
 /// Overview rows used by the Changes section, mirroring [`render_sections`].
 pub(super) fn changes_section_height(data: &InfoWidgetData) -> u16 {
@@ -698,8 +698,10 @@ pub struct InfoWidgetData {
     pub usage_info: Option<UsageInfo>,
     /// Show consumed rather than remaining percentages in usage limits.
     pub usage_display_used: bool,
-    /// pj: usagefleet group budget of the active Claude account, e.g. "Artur: 5h 30% · 7d 17%".
-    pub usagefleet_line: Option<String>,
+    /// pj: label or email of the active Claude account; the Overview then shows one quota row per account.
+    pub claude_account: Option<String>,
+    /// pj: usagefleet group of the active Claude account.
+    pub usagefleet_group: Option<pj_ext::usagefleet::GroupQuota>,
     /// Streaming output tokens per second (approximate)
     pub tokens_per_second: Option<f32>,
     /// Active provider name (openrouter/openai/anthropic/...)
@@ -2107,17 +2109,16 @@ fn render_sections(
     }
 
     // Usage info (subscription limits)
-    if let Some(info) = &data.usage_info
+    if let Some(account) = &data.claude_account {
+        lines.extend(render_claude_quota(
+            account,
+            data.usage_info.as_ref(),
+            data.usagefleet_group.as_ref(),
+        ));
+    } else if let Some(info) = &data.usage_info
         && info.available
     {
         lines.extend(render_usage_compact(info, data.usage_display_used));
-    }
-
-    if let Some(group) = &data.usagefleet_line {
-        lines.push(Line::from(Span::styled(
-            group.clone(),
-            Style::default().fg(rgb(140, 140, 150)),
-        )));
     }
 
     if let Some(cache) = data.cache_hit_info.as_ref() {
